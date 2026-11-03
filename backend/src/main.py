@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.config.database import lifespan
 from src.config.settings import get_settings
-from src.routes.image_routes import router as image_router
+from src.routes import routers
 
 
 settings = get_settings()
@@ -22,7 +22,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
-app.include_router(image_router)
+for router in routers:
+    app.include_router(router)
 app.mount(
     "/uploads/images",
     StaticFiles(directory=str(settings.image_storage_dir)),

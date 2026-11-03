@@ -22,6 +22,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             [("PlaceId", ASCENDING), ("SortOrder", ASCENDING)],
             unique=True,
         )
+        await database[settings.places_collection].create_index(
+            [("PlaceId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.places_collection].create_index(
+            [("Slug", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.places_collection].create_index(
+            [("CategoryId", ASCENDING), ("IsVisible", ASCENDING)],
+        )
+        await database[settings.categories_collection].create_index(
+            [("CategoryId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.categories_collection].create_index(
+            [("CategoryName", ASCENDING)],
+            unique=True,
+        )
+        admin_accounts = database[settings.admin_accounts_collection]
+        await admin_accounts.create_index(
+            [("AdminId", ASCENDING)],
+            unique=True,
+        )
+        await admin_accounts.create_index(
+            [("Username", ASCENDING)],
+            unique=True,
+        )
+        await admin_accounts.create_index(
+            [("Email", ASCENDING)],
+            unique=True,
+        )
+        activity_logs = database[settings.admin_activity_logs_collection]
+        await activity_logs.create_index(
+            [("LogId", ASCENDING)],
+            unique=True,
+        )
+        await activity_logs.create_index(
+            [("AdminId", ASCENDING), ("CreatedAt", ASCENDING)],
+        )
         app.state.mongo_client = client
         app.state.database = database
         yield

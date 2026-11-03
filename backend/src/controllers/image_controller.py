@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
+from pymongo.errors import PyMongoError
 
 from src.config.database import get_database
 from src.config.settings import get_settings
@@ -11,6 +12,7 @@ from src.repositories.place_image_repository import (
     PlaceImageRepository,
     parse_place_id,
 )
+from src.services.admin_audit_service import log_admin_activity
 from src.services.image_service import ImageService
 
 
@@ -51,6 +53,34 @@ def _service(database) -> ImageService:
     return ImageService(_repository(database), get_settings())
 
 
+async def _record_activity(
+    database,
+    admin_claims: dict,
+    action: str,
+    entity_id: str,
+    description: str,
+) -> None:
+    settings = get_settings()
+    try:
+        await log_admin_activity(
+            database,
+            settings.admin_activity_logs_collection,
+            admin_id=admin_claims["AdminId"],
+            action=action,
+            entity_name="PlaceImages",
+            entity_id=entity_id,
+            description=description,
+        )
+    except PyMongoError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The image operation completed, but its activity log could not "
+                "be saved. Contact an administrator before retrying."
+            ),
+        ) from error
+
+
 @router.get(
     "/places/{place_id}/images",
     response_model=list[ImageView],
@@ -60,11 +90,7 @@ async def list_place_images(
     place_id: str,
     database=Depends(get_database),
 ) -> list[dict]:
-    place_id_value = parse_place_id(place_id)
-    repository = _repository(database)
-    if not await repository.place_exists(place_id_value):
-        raise HTTPException(status_code=404, detail="Place was not found.")
-    return await repository.list_for_place(place_id_value)
+    return await _service(database).list_for_place(parse_place_id(place_id))
 
 
 @router.post(
@@ -79,13 +105,23 @@ async def upload_place_images(
     captions: Annotated[list[str] | None, Form()] = None,
     sort_orders: Annotated[list[int] | None, Form()] = None,
     database=Depends(get_database),
+    admin_claims: dict = Depends(require_admin),
 ) -> list[dict]:
-    return await _service(database).upload(
+    images = await _service(database).upload(
         parse_place_id(place_id),
         files,
         captions,
         sort_orders,
     )
+    for image in images:
+        await _record_activity(
+            database,
+            admin_claims,
+            action="UPLOAD",
+            entity_id=image["ImageId"],
+            description=f"Uploaded image for place {image['PlaceId']}.",
+        )
+    return images
 
 
 @router.patch(
@@ -97,18 +133,35 @@ async def update_image(
     image_id: str,
     update: ImageUpdate,
     database=Depends(get_database),
+    admin_claims: dict = Depends(require_admin),
 ) -> dict:
-    return await _service(database).update(
+    image = await _service(database).update(
         image_id,
         update.caption,
         update.sort_order,
     )
+    await _record_activity(
+        database,
+        admin_claims,
+        action="UPDATE",
+        entity_id=image_id,
+        description="Updated image caption or sort order.",
+    )
+    return image
 
 
 @router.delete("/images/{image_id}", status_code=204)
 async def delete_image(
     image_id: str,
     database=Depends(get_database),
+    admin_claims: dict = Depends(require_admin),
 ) -> Response:
     await _service(database).delete(image_id)
+    await _record_activity(
+        database,
+        admin_claims,
+        action="DELETE",
+        entity_id=image_id,
+        description="Deleted image and its file.",
+    )
     return Response(status_code=204)

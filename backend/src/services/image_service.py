@@ -44,6 +44,11 @@ class ImageService:
         )
         self.staging_dir.mkdir(parents=True, exist_ok=True)
 
+    async def list_for_place(self, place_id: int | str) -> list[dict]:
+        if not await self.repository.place_exists(place_id):
+            raise HTTPException(status_code=404, detail="Place was not found.")
+        return await self.repository.list_for_place(place_id)
+
     async def upload(
         self,
         place_id: int | str,

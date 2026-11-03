@@ -3,3 +3,5 @@ __pycache__/
 *.py[cod]
 backend/atlas-credentials.env
 backend/uploads/.images-staging/
+frontend/node_modules/
+frontend/dist/

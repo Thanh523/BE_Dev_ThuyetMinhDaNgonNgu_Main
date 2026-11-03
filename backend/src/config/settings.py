@@ -26,13 +26,17 @@ class Settings:
     jwt_audience: str | None
     cors_origins: list[str]
     image_storage_dir: Path
+    categories_collection: str = "Categories"
+    counters_collection: str = "Counters"
+    admin_accounts_collection: str = "AdminAccounts"
+    admin_activity_logs_collection: str = "AdminActivityLogs"
     max_image_size_bytes: int = 10 * 1024 * 1024
 
 
 def get_settings() -> Settings:
     return Settings(
         mongodb_uri=os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
-        mongodb_database=os.getenv("MONGODB_DATABASE", "multilingual_guide"),
+        mongodb_database=os.getenv("MONGODB_DATABASE", "SaigonEcho"),
         places_collection=os.getenv("MONGODB_PLACES_COLLECTION", "Places"),
         place_images_collection=os.getenv("MONGODB_PLACE_IMAGES_COLLECTION", "PlaceImages"),
         jwt_key=os.getenv("JWT_KEY"),
@@ -50,4 +54,14 @@ def get_settings() -> Settings:
                 str(BACKEND_ROOT / "uploads" / "images"),
             )
         ).resolve(),
+        categories_collection=os.getenv("MONGODB_CATEGORIES_COLLECTION", "Categories"),
+        counters_collection=os.getenv("MONGODB_COUNTERS_COLLECTION", "Counters"),
+        admin_accounts_collection=os.getenv(
+            "MONGODB_ADMIN_ACCOUNTS_COLLECTION",
+            "AdminAccounts",
+        ),
+        admin_activity_logs_collection=os.getenv(
+            "MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION",
+            "AdminActivityLogs",
+        ),
     )

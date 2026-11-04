@@ -22,7 +22,8 @@ browser storage.
 After login, use the separate **Địa điểm**, **Hình ảnh**, **Danh mục**, and
 **Người dùng** pages. The user page searches accounts by name/email, filters
 by active status, pages through results, and lets an admin lock or unlock an
-account, or edit the user's name and email. The places page supports place
+account, edit the user's name and email, and view saved places and listening
+history when available. The places page supports place
 CRUD, detail view, search, filters, visibility toggling, and safe deletion
 checks. The categories page supports category CRUD. The images page can list a
 place's images, upload JPEG/PNG/WebP files (up to 10 MB each), update captions

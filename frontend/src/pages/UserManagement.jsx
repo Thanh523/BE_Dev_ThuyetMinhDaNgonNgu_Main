@@ -50,6 +50,7 @@ export default function UserManagement({
   const [busy, setBusy] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [profileForm, setProfileForm] = useState({ full_name: "", email: "" });
+  const [activity, setActivity] = useState(null);
 
   // Tải một trang user theo bộ lọc đã áp dụng; API chỉ trả dữ liệu an toàn để hiển thị.
   const loadUsers = useCallback(async (offset, activeFilters) => {
@@ -159,6 +160,25 @@ export default function UserManagement({
     }
   }
 
+  // Tải hoạt động gần đây của user; endpoint chỉ đọc dữ liệu liên quan.
+  async function viewActivity(user) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await adminRequest(
+        apiUrl,
+        token,
+        `/api/admin/users/${encodeURIComponent(user.UserId)}/activity?limit=20`,
+      );
+      setActivity(result);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const lastPageStart = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1) * PAGE_SIZE;
   const pageNumber = total === 0 ? 0 : Math.floor(skip / PAGE_SIZE) + 1;
   const pageCount = Math.ceil(total / PAGE_SIZE);
@@ -250,6 +270,75 @@ export default function UserManagement({
         </form>
       )}
 
+      {activity && (
+        <section className="user-activity">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">HOẠT ĐỘNG NGƯỜI DÙNG</p>
+              <h2>{activity.user.FullName}</h2>
+            </div>
+            <button
+              className="button button-outline"
+              onClick={() => setActivity(null)}
+              type="button"
+            >
+              Đóng
+            </button>
+          </div>
+          <div className="user-activity-grid">
+            <section className="user-activity-card">
+              <div className="section-heading">
+                <h3>Địa điểm đã lưu</h3>
+                <span className="muted-count">
+                  {activity.saved_places_total} mục
+                </span>
+              </div>
+              {activity.saved_places.length > 0 ? (
+                <ul className="user-activity-list">
+                  {activity.saved_places.map((savedPlace, index) => (
+                    <li
+                      key={savedPlace.SavedPlaceId ?? `${savedPlace.PlaceId}-${index}`}
+                    >
+                      <strong>Địa điểm #{savedPlace.PlaceId}</strong>
+                      <span>Đã lưu: {formatDate(savedPlace.SavedAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="user-activity-empty">Chưa có địa điểm được lưu.</p>
+              )}
+            </section>
+
+            <section className="user-activity-card">
+              <div className="section-heading">
+                <h3>Lịch sử nghe</h3>
+                <span className="muted-count">
+                  {activity.listening_history_total} lượt
+                </span>
+              </div>
+              {activity.listening_history.length > 0 ? (
+                <ul className="user-activity-list">
+                  {activity.listening_history.map((entry, index) => (
+                    <li
+                      key={entry.ListeningHistoryId ?? `${entry.AudioId}-${index}`}
+                    >
+                      <strong>Audio #{entry.AudioId}</strong>
+                      <span>
+                        {formatDate(entry.ListenedAt)} ·{" "}
+                        {entry.PlayedSeconds} giây ·{" "}
+                        {entry.IsCompleted ? "Hoàn thành" : "Chưa hoàn thành"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="user-activity-empty">Chưa có lịch sử nghe.</p>
+              )}
+            </section>
+          </div>
+        </section>
+      )}
+
       <div className="place-table-wrap user-table-wrap">
         <table className="place-table user-table">
           <thead>
@@ -277,6 +366,14 @@ export default function UserManagement({
                 <td>{formatDate(user.CreatedAt)}</td>
                 <td>{formatDate(user.LastLoginAt)}</td>
                 <td>
+                  <button
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => viewActivity(user)}
+                    type="button"
+                  >
+                    Hoạt động
+                  </button>
                   <button
                     className="text-button"
                     disabled={busy}

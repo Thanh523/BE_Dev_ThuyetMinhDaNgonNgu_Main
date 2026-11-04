@@ -1,5 +1,7 @@
+import re
+
 from fastapi import HTTPException
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from src.repositories.user_account_repository import UserAccountRepository
 
@@ -33,6 +35,57 @@ class UserAccountService:
                 status_code=503,
                 detail="User account status could not be updated.",
             ) from error
+        if user is None:
+            raise HTTPException(status_code=404, detail="User account was not found.")
+        return user
+
+    # Chuẩn hóa và kiểm tra họ tên/email trước khi ghi hồ sơ user.
+    async def update_profile(
+        self,
+        user_id: str,
+        full_name: str | None,
+        email: str | None,
+    ) -> dict:
+        changes: dict = {}
+        if full_name is not None:
+            normalized_name = full_name.strip()
+            if not normalized_name:
+                raise HTTPException(status_code=422, detail="Full name is required.")
+            changes["FullName"] = normalized_name
+
+        if email is not None:
+            normalized_email = email.strip().casefold()
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized_email):
+                raise HTTPException(status_code=422, detail="Email address is invalid.")
+            changes["Email"] = normalized_email
+
+        if not changes:
+            raise HTTPException(
+                status_code=422,
+                detail="At least one profile field must be provided.",
+            )
+
+        try:
+            if "Email" in changes and await self.repository.email_exists(
+                changes["Email"],
+                user_id,
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Email address is already used by another account.",
+                )
+            user = await self.repository.update_profile(user_id, changes)
+        except DuplicateKeyError as error:
+            raise HTTPException(
+                status_code=409,
+                detail="Email address is already used by another account.",
+            ) from error
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="User profile could not be updated.",
+            ) from error
+
         if user is None:
             raise HTTPException(status_code=404, detail="User account was not found.")
         return user

@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
@@ -37,6 +38,34 @@ class FakeUserCollection:
     def find(self, query, projection):
         self.find_arguments = (query, projection)
         return FakeCursor(self.items)
+
+    async def find_one(self, query, projection):
+        self.exists_arguments = (query, projection)
+        conditions = query.get("$and", [])
+        email_condition = next(
+            (condition["Email"] for condition in conditions if "Email" in condition),
+            None,
+        )
+        excluded_user_ids = next(
+            (
+                condition["UserId"]["$nin"]
+                for condition in conditions
+                if "UserId" in condition
+            ),
+            [],
+        )
+        if email_condition is None:
+            return None
+        pattern = re.compile(email_condition["$regex"], re.IGNORECASE)
+        return next(
+            (
+                {"_id": user.get("_id")}
+                for user in self.items
+                if pattern.fullmatch(user.get("Email", ""))
+                and user.get("UserId") not in excluded_user_ids
+            ),
+            None,
+        )
 
     async def count_documents(self, query):
         return len(self.items)
@@ -151,6 +180,81 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
             await service.update_status("missing", False)
 
         self.assertEqual(404, raised.exception.status_code)
+
+    async def test_email_exists_ignores_same_user_and_finds_another_user(self):
+        collection = FakeUserCollection(
+            [
+                {"UserId": 7, "Email": "same@example.com"},
+                {"UserId": 8, "Email": "other@example.com"},
+            ]
+        )
+        repository = UserAccountRepository(FakeDatabase(collection), self.settings)
+
+        self.assertFalse(await repository.email_exists("SAME@example.com", "7"))
+        self.assertTrue(await repository.email_exists("same@example.com", "8"))
+
+    async def test_profile_update_normalizes_name_and_email(self):
+        repository = Mock()
+        repository.email_exists = AsyncMock(return_value=False)
+        repository.update_profile = AsyncMock(
+            return_value={
+                "UserId": "user-7",
+                "FullName": "Test User",
+                "Email": "test@example.com",
+                "IsActive": True,
+            }
+        )
+        service = UserAccountService(repository)
+
+        await service.update_profile("user-7", " Test User ", " TEST@EXAMPLE.COM ")
+
+        repository.update_profile.assert_awaited_once_with(
+            "user-7",
+            {"FullName": "Test User", "Email": "test@example.com"},
+        )
+
+    async def test_profile_update_rejects_invalid_email(self):
+        repository = Mock()
+        service = UserAccountService(repository)
+
+        with self.assertRaises(HTTPException) as raised:
+            await service.update_profile("user-7", "Test User", "not-an-email")
+
+        self.assertEqual(422, raised.exception.status_code)
+        repository.update_profile.assert_not_called()
+
+    async def test_profile_update_rejects_email_used_by_another_user(self):
+        repository = Mock()
+        repository.email_exists = AsyncMock(return_value=True)
+        repository.update_profile = AsyncMock()
+        service = UserAccountService(repository)
+
+        with self.assertRaises(HTTPException) as raised:
+            await service.update_profile("user-7", None, "taken@example.com")
+
+        self.assertEqual(409, raised.exception.status_code)
+        repository.update_profile.assert_not_called()
+
+    async def test_profile_update_only_returns_public_fields(self):
+        users = [
+            {
+                "UserId": "user-7",
+                "FullName": "Old Name",
+                "Email": "old@example.com",
+                "PasswordHash": "must-not-be-returned",
+                "IsActive": True,
+            }
+        ]
+        collection = FakeUserCollection(users)
+        repository = UserAccountRepository(FakeDatabase(collection), self.settings)
+
+        result = await repository.update_profile(
+            "user-7",
+            {"FullName": "New Name", "Email": "new@example.com"},
+        )
+
+        self.assertEqual("New Name", result["FullName"])
+        self.assertNotIn("PasswordHash", result)
 
     async def test_service_returns_unavailable_error_on_database_failure(self):
         repository = Mock()

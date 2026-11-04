@@ -629,6 +629,32 @@ input::placeholder {
   margin-bottom: 18px;
 }
 
+.user-profile-form {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafbf8;
+}
+
+.user-profile-form .section-heading {
+  margin-bottom: 0;
+}
+
+.user-profile-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.user-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .user-table-wrap {
   margin-top: 8px;
 }
@@ -830,6 +856,7 @@ input::placeholder {
   .place-form,
   .place-filters,
   .user-filters,
+  .user-profile-fields,
   .detail-grid {
     grid-template-columns: 1fr;
   }

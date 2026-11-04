@@ -11,6 +11,13 @@ class UserAccountRepository:
         # Chọn collection UserAccounts theo cấu hình của ứng dụng.
         self.users = database[settings.user_accounts_collection]
 
+    @staticmethod
+    def _user_id_query(user_id: str) -> dict:
+        # Hỗ trợ UserId lưu dạng chuỗi hoặc số nguyên như trong các bản dữ liệu khác nhau.
+        if user_id.isdecimal() and str(int(user_id)) == user_id:
+            return {"$or": [{"UserId": user_id}, {"UserId": int(user_id)}]}
+        return {"UserId": user_id}
+
     async def list(
         self,
         search: str,
@@ -52,15 +59,45 @@ class UserAccountRepository:
         return items, total
 
     async def update_status(self, user_id: str, is_active: bool) -> dict | None:
-        # Hỗ trợ UserId lưu dạng chuỗi hoặc số nguyên như trong các bản dữ liệu khác nhau.
-        query: dict = {"UserId": user_id}
-        if user_id.isdecimal() and str(int(user_id)) == user_id:
-            query = {"$or": [{"UserId": user_id}, {"UserId": int(user_id)}]}
-
         # Trả về bản ghi vừa cập nhật nhưng chỉ với các trường an toàn cho API.
         return await self.users.find_one_and_update(
-            query,
+            self._user_id_query(user_id),
             {"$set": {"IsActive": is_active}},
+            return_document=ReturnDocument.AFTER,
+            projection={
+                "_id": 0,
+                "UserId": 1,
+                "FullName": 1,
+                "Email": 1,
+                "IsActive": 1,
+                "CreatedAt": 1,
+                "LastLoginAt": 1,
+            },
+        )
+
+    async def email_exists(self, email: str, user_id: str) -> bool:
+        # Email được so sánh không phân biệt hoa thường và loại trừ chính user đang sửa.
+        user_ids: list[str | int] = [user_id]
+        if user_id.isdecimal() and str(int(user_id)) == user_id:
+            user_ids.append(int(user_id))
+        query = {
+            "$and": [
+                {
+                    "Email": {
+                        "$regex": f"^{re.escape(email)}$",
+                        "$options": "i",
+                    }
+                },
+                {"UserId": {"$nin": user_ids}},
+            ]
+        }
+        return await self.users.find_one(query, {"_id": 1}) is not None
+
+    async def update_profile(self, user_id: str, changes: dict) -> dict | None:
+        # Chỉ cập nhật họ tên/email và chỉ trả về các trường an toàn cho API.
+        return await self.users.find_one_and_update(
+            self._user_id_query(user_id),
+            {"$set": changes},
             return_document=ReturnDocument.AFTER,
             projection={
                 "_id": 0,

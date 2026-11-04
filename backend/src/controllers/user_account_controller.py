@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo.errors import PyMongoError
 
 from src.config.database import get_database
@@ -42,6 +42,19 @@ class UserPage(BaseModel):
 
 class UserStatusUpdate(BaseModel):
     is_active: bool
+
+
+class UserProfileUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=200)
+    email: str | None = Field(default=None, min_length=3, max_length=254)
+
+    @model_validator(mode="after")
+    def validate_profile_fields(self):
+        # Không cho gửi payload rỗng hoặc dùng null để xóa thông tin bắt buộc.
+        fields = self.model_fields_set
+        if not fields or any(getattr(self, field) is None for field in fields):
+            raise ValueError("Provide at least one non-null profile field.")
+        return self
 
 
 def _service(database) -> UserAccountService:
@@ -98,6 +111,41 @@ async def update_user_status(
             detail=(
                 "The user status changed, but its activity log could not be "
                 "saved. Contact an administrator before retrying."
+            ),
+        ) from error
+    return user
+
+
+@router.patch("/{user_id}", response_model=UserView)
+async def update_user_profile(
+    user_id: str,
+    request: UserProfileUpdate,
+    database=Depends(get_database),
+    admin_claims: dict = Depends(require_admin),
+) -> dict:
+    # Cập nhật các trường hồ sơ được phép và ghi nhật ký admin.
+    user = await _service(database).update_profile(
+        user_id,
+        request.full_name,
+        request.email,
+    )
+    settings = get_settings()
+    try:
+        await log_admin_activity(
+            database,
+            settings.admin_activity_logs_collection,
+            admin_id=admin_claims["AdminId"],
+            action="UPDATE",
+            entity_name="UserAccounts",
+            entity_id=str(user["UserId"]),
+            description="Updated user profile.",
+        )
+    except PyMongoError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The user profile was updated, but its activity log could not "
+                "be saved. Contact an administrator before retrying."
             ),
         ) from error
     return user

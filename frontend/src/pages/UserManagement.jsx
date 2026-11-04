@@ -48,6 +48,8 @@ export default function UserManagement({
   const [skip, setSkip] = useState(0);
   const [total, setTotal] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [profileForm, setProfileForm] = useState({ full_name: "", email: "" });
 
   // Tải một trang user theo bộ lọc đã áp dụng; API chỉ trả dữ liệu an toàn để hiển thị.
   const loadUsers = useCallback(async (offset, activeFilters) => {
@@ -119,6 +121,44 @@ export default function UserManagement({
     }
   }
 
+  // Nạp thông tin hiện tại của user vào form chỉnh sửa.
+  function startEditing(user) {
+    setEditingUser(user);
+    setProfileForm({ full_name: user.FullName, email: user.Email });
+    setError("");
+    setNotice("");
+  }
+
+  // Gửi họ tên/email mới rồi tải lại danh sách theo bộ lọc hiện tại.
+  async function saveProfile(event) {
+    event.preventDefault();
+    if (!editingUser) {
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await adminRequest(
+        apiUrl,
+        token,
+        `/api/admin/users/${encodeURIComponent(editingUser.UserId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(profileForm),
+        },
+      );
+      setEditingUser(null);
+      setNotice("Đã cập nhật thông tin người dùng.");
+      await loadUsers(skip, filters);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const lastPageStart = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1) * PAGE_SIZE;
   const pageNumber = total === 0 ? 0 : Math.floor(skip / PAGE_SIZE) + 1;
   const pageCount = Math.ceil(total / PAGE_SIZE);
@@ -159,6 +199,57 @@ export default function UserManagement({
         </button>
       </form>
 
+      {editingUser && (
+        <form className="user-profile-form" onSubmit={saveProfile}>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">CHỈNH SỬA HỒ SƠ</p>
+              <h2>{editingUser.FullName}</h2>
+            </div>
+          </div>
+          <div className="user-profile-fields">
+            <label>
+              Họ tên
+              <input
+                maxLength={200}
+                onChange={(event) => setProfileForm((current) => ({
+                  ...current,
+                  full_name: event.target.value,
+                }))}
+                required
+                value={profileForm.full_name}
+              />
+            </label>
+            <label>
+              Email
+              <input
+                maxLength={254}
+                onChange={(event) => setProfileForm((current) => ({
+                  ...current,
+                  email: event.target.value,
+                }))}
+                required
+                type="email"
+                value={profileForm.email}
+              />
+            </label>
+          </div>
+          <div className="user-profile-actions">
+            <button className="button" disabled={busy} type="submit">
+              Lưu thông tin
+            </button>
+            <button
+              className="button button-outline"
+              disabled={busy}
+              onClick={() => setEditingUser(null)}
+              type="button"
+            >
+              Hủy
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="place-table-wrap user-table-wrap">
         <table className="place-table user-table">
           <thead>
@@ -186,6 +277,14 @@ export default function UserManagement({
                 <td>{formatDate(user.CreatedAt)}</td>
                 <td>{formatDate(user.LastLoginAt)}</td>
                 <td>
+                  <button
+                    className="text-button"
+                    disabled={busy}
+                    onClick={() => startEditing(user)}
+                    type="button"
+                  >
+                    Sửa
+                  </button>
                   <button
                     className={`text-button ${user.IsActive ? "danger-text" : ""}`}
                     disabled={busy}

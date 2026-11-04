@@ -2,10 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 
 const PAGE_SIZE = 20;
 
-async function adminRequest(apiUrl, token, path) {
+async function adminRequest(apiUrl, token, path, options = {}) {
+  const headers = new Headers(options.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (options.body) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(`${apiUrl.replace(/\/+$/, "")}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    ...options,
+    headers,
   });
+  if (response.status === 204) {
+    return null;
+  }
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.detail;
@@ -26,7 +35,12 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN");
 }
 
-export default function UserManagement({ apiUrl, token, setError }) {
+export default function UserManagement({
+  apiUrl,
+  token,
+  setError,
+  setNotice,
+}) {
   const [users, setUsers] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [statusInput, setStatusInput] = useState("all");
@@ -73,6 +87,36 @@ export default function UserManagement({ apiUrl, token, setError }) {
     event.preventDefault();
     setFilters({ search: searchInput.trim(), status: statusInput });
     setSkip(0);
+  }
+
+  // Xác nhận trước khi khóa/mở tài khoản và tải lại trang hiện tại sau khi lưu.
+  async function toggleUserStatus(user) {
+    const nextIsActive = !user.IsActive;
+    const action = nextIsActive ? "mở khóa" : "khóa";
+    if (!window.confirm(`Xác nhận ${action} tài khoản "${user.FullName}"?`)) {
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await adminRequest(
+        apiUrl,
+        token,
+        `/api/admin/users/${encodeURIComponent(user.UserId)}/status`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ is_active: nextIsActive }),
+        },
+      );
+      setNotice(nextIsActive ? "Đã mở khóa tài khoản." : "Đã khóa tài khoản.");
+      await loadUsers(skip, filters);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const lastPageStart = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1) * PAGE_SIZE;
@@ -125,6 +169,7 @@ export default function UserManagement({ apiUrl, token, setError }) {
               <th>TRẠNG THÁI</th>
               <th>NGÀY TẠO</th>
               <th>ĐĂNG NHẬP GẦN NHẤT</th>
+              <th>THAO TÁC</th>
             </tr>
           </thead>
           <tbody>
@@ -140,11 +185,21 @@ export default function UserManagement({ apiUrl, token, setError }) {
                 </td>
                 <td>{formatDate(user.CreatedAt)}</td>
                 <td>{formatDate(user.LastLoginAt)}</td>
+                <td>
+                  <button
+                    className={`text-button ${user.IsActive ? "danger-text" : ""}`}
+                    disabled={busy}
+                    onClick={() => toggleUserStatus(user)}
+                    type="button"
+                  >
+                    {user.IsActive ? "Khóa" : "Mở khóa"}
+                  </button>
+                </td>
               </tr>
             ))}
             {users.length === 0 && (
               <tr>
-                <td className="user-empty" colSpan="6">
+                <td className="user-empty" colSpan="7">
                   {busy
                     ? "Đang tải người dùng..."
                     : "Không tìm thấy người dùng phù hợp."}

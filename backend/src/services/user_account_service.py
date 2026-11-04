@@ -23,3 +23,16 @@ class UserAccountService:
                 status_code=503,
                 detail="User list is temporarily unavailable.",
             ) from error
+
+    # Cập nhật trạng thái tài khoản; báo 404 nếu UserId không tồn tại.
+    async def update_status(self, user_id: str, is_active: bool) -> dict:
+        try:
+            user = await self.repository.update_status(user_id, is_active)
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="User account status could not be updated.",
+            ) from error
+        if user is None:
+            raise HTTPException(status_code=404, detail="User account was not found.")
+        return user

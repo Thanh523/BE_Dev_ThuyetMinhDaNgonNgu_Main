@@ -1,6 +1,8 @@
 import re
 from typing import Any
 
+from pymongo import ReturnDocument
+
 from src.config.settings import Settings
 
 
@@ -48,3 +50,25 @@ class UserAccountRepository:
         items = await cursor.to_list(length=limit)
         total = await self.users.count_documents(query)
         return items, total
+
+    async def update_status(self, user_id: str, is_active: bool) -> dict | None:
+        # Hỗ trợ UserId lưu dạng chuỗi hoặc số nguyên như trong các bản dữ liệu khác nhau.
+        query: dict = {"UserId": user_id}
+        if user_id.isdecimal() and str(int(user_id)) == user_id:
+            query = {"$or": [{"UserId": user_id}, {"UserId": int(user_id)}]}
+
+        # Trả về bản ghi vừa cập nhật nhưng chỉ với các trường an toàn cho API.
+        return await self.users.find_one_and_update(
+            query,
+            {"$set": {"IsActive": is_active}},
+            return_document=ReturnDocument.AFTER,
+            projection={
+                "_id": 0,
+                "UserId": 1,
+                "FullName": 1,
+                "Email": 1,
+                "IsActive": 1,
+                "CreatedAt": 1,
+                "LastLoginAt": 1,
+            },
+        )

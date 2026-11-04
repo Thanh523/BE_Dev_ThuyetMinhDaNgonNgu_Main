@@ -227,6 +227,7 @@ export default function App() {
         <UserManagement
           apiUrl={apiUrl}
           setError={setError}
+          setNotice={setNotice}
           token={normalizedAuthToken}
         />
       )}

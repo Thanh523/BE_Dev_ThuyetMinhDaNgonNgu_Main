@@ -93,9 +93,11 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
 | `DELETE` | `/api/admin/categories/{category_id}` | Delete an unused category |
 | `GET` | `/api/admin/users` | Search and page user accounts (never returns password hashes) |
+| `PATCH` | `/api/admin/users/{user_id}/status` | Activate or deactivate a user account |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and
-`limit` query parameters. It is an admin-only, read-only endpoint.
+`limit` query parameters. User management endpoints require an admin token;
+status changes are recorded in `AdminActivityLogs`.
 
 Uploads accept valid JPEG, PNG, and WebP files up to 10 MB each. If captions or
 sort orders are provided during a batch upload, provide one value per file.

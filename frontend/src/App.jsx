@@ -12,7 +12,7 @@ function normalizedToken(token) {
 export default function App() {
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
   const [token, setToken] = useState("");
-  const [activePage, setActivePage] = useState("places");
+  const [activePage, setActivePage] = useState("placeimages");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -60,7 +60,7 @@ export default function App() {
       }
       setToken(result.access_token);
       setPassword("");
-      setActivePage("places");
+      setActivePage("placeimages");
       setNotice("Đăng nhập thành công. Phiên đăng nhập hết hạn sau 8 giờ.");
     } catch (loginError) {
       setError(loginError.message);

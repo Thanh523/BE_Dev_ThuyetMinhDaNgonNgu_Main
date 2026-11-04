@@ -351,12 +351,6 @@ input::placeholder {
   margin-bottom: 16px;
 }
 
-.gallery-tools {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .admin-tabs {
   display: flex;
   gap: 7px;
@@ -384,14 +378,9 @@ input::placeholder {
   box-shadow: 0 1px 3px rgb(25 37 29 / 10%);
 }
 
-.image-place-panel {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-}
-
-.image-place-panel label {
-  width: min(100%, 360px);
+.upload-place-select {
+  width: min(100%, 430px);
+  margin-bottom: 16px;
 }
 
 .places-manager {
@@ -679,6 +668,13 @@ input::placeholder {
   padding: 14px;
 }
 
+.image-place-name {
+  margin: 0;
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .image-fields input {
   height: 37px;
   font-size: 12px;
@@ -705,15 +701,6 @@ input::placeholder {
   border-color: #e5bcb5;
   color: #8c332a;
   background: #fff5f3;
-}
-
-.image-id {
-  overflow: hidden;
-  margin: 0;
-  color: #9a9f99;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .empty-state {
@@ -817,21 +804,12 @@ input::placeholder {
     flex-direction: column;
   }
 
-  .image-place-panel label {
-    width: 100%;
-  }
-
   .category-form {
     grid-template-columns: 1fr;
   }
 
   .category-form-actions {
     flex-wrap: wrap;
-  }
-
-  .image-place-panel {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .load-button {

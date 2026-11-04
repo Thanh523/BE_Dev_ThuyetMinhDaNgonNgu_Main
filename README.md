@@ -57,6 +57,8 @@ before deploying beyond local development.
 The current Atlas database did not contain `Places` or `Categories` when this
 feature was added. Start the API, sign in, create one or more categories in the
 **Quản lý danh mục** section, then add places and choose a category.
+The **Hình ảnh** section automatically loads the image library for all places;
+choose a place by name only when uploading an image.
 
 `AdminAccounts` stores `AdminId`, `Username`, `Email`, `PasswordHash`, `Role`,
 `IsActive`, `CreatedAt`, `UpdatedAt`, and `LastLoginAt`. `AdminActivityLogs`
@@ -78,6 +80,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/admin/images` | List all images with their place names |
 | `GET` | `/api/admin/places/{place_id}/images` | List a place's images by `sort_order` |
 | `POST` | `/api/admin/places/{place_id}/images` | Upload multiple images as multipart field `files`; optional repeated `captions` and `sort_orders` fields |
 | `PATCH` | `/api/admin/images/{image_id}` | Update `caption`, `sort_order`, or both |

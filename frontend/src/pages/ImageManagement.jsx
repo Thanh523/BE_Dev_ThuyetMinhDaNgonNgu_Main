@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 async function request(apiUrl, token, path, options = {}) {
   const headers = new Headers(options.headers);
@@ -26,6 +26,38 @@ async function request(apiUrl, token, path, options = {}) {
     );
   }
   return payload;
+}
+
+async function loadAllPlaces(apiUrl, token) {
+  const places = [];
+  let skip = 0;
+  let total = 0;
+  do {
+    const params = new URLSearchParams({
+      visibility: "all",
+      skip: String(skip),
+      limit: "100",
+    });
+    const page = await request(
+      apiUrl,
+      token,
+      `/api/admin/places?${params.toString()}`,
+    );
+    places.push(...page.items);
+    total = page.total;
+    skip += page.items.length;
+    if (page.items.length === 0) {
+      break;
+    }
+  } while (skip < total);
+  return places;
+}
+
+function compareImages(left, right) {
+  return (
+    (left.place_name ?? "").localeCompare(right.place_name ?? "") ||
+    left.sort_order - right.sort_order
+  );
 }
 
 function ImageCard({ image, apiUrl, token, onUpdated, onDeleted, reportError }) {
@@ -90,6 +122,9 @@ function ImageCard({ image, apiUrl, token, onUpdated, onDeleted, reportError }) 
         <span className="order-badge">#{image.sort_order}</span>
       </div>
       <form className="image-fields" onSubmit={saveChanges}>
+        <p className="image-place-name">
+          {image.place_name || "Địa điểm không tồn tại"}
+        </p>
         <label>
           Caption
           <input
@@ -122,9 +157,6 @@ function ImageCard({ image, apiUrl, token, onUpdated, onDeleted, reportError }) 
             Xóa
           </button>
         </div>
-        <p className="image-id" title={image.image_id}>
-          ID: {image.image_id}
-        </p>
       </form>
     </article>
   );
@@ -137,43 +169,41 @@ export default function ImageManagement({
   setNotice,
 }) {
   const [placeId, setPlaceId] = useState("");
+  const [places, setPlaces] = useState([]);
   const [images, setImages] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  async function loadImages(event) {
-    event?.preventDefault();
-    setError("");
-    setNotice("");
-    if (!apiUrl.trim()) {
-      setError("Vui lòng nhập địa chỉ backend.");
+  const loadDashboard = useCallback(async () => {
+    if (!apiUrl.trim() || !token) {
       return;
     }
-    if (!token) {
-      setError("Vui lòng đăng nhập admin trước.");
-      return;
-    }
-    if (!placeId.trim()) {
-      setError("Vui lòng nhập Place ID.");
-      return;
-    }
-
     setLoading(true);
     try {
-      const result = await request(
-        apiUrl,
-        token,
-        `/api/admin/places/${encodeURIComponent(placeId.trim())}/images`,
+      const [placeResults, imageResults] = await Promise.all([
+        loadAllPlaces(apiUrl, token),
+        request(apiUrl, token, "/api/admin/images"),
+      ]);
+      setPlaces(placeResults);
+      setImages(imageResults);
+      setPlaceId((current) =>
+        placeResults.some((place) => String(place.PlaceId) === current)
+          ? current
+          : placeResults[0]
+            ? String(placeResults[0].PlaceId)
+            : "",
       );
-      setImages(result);
-      setNotice(`Đã tải ${result.length} ảnh.`);
     } catch (error) {
       setError(error.message);
     } finally {
       setLoading(false);
     }
-  }
+  }, [apiUrl, token, setError]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   function updateSelectedFiles(fileList) {
     const files = Array.from(fileList ?? []);
@@ -204,8 +234,8 @@ export default function ImageManagement({
       setError("Vui lòng đăng nhập admin trước.");
       return;
     }
-    if (!placeId.trim()) {
-      setError("Vui lòng nhập Place ID.");
+    if (!placeId) {
+      setError("Vui lòng chọn địa điểm.");
       return;
     }
     if (selectedFiles.length === 0) {
@@ -240,9 +270,15 @@ export default function ImageManagement({
         { method: "POST", body: formData },
       );
       setImages((current) =>
-        [...current, ...uploaded].sort(
-          (left, right) => left.sort_order - right.sort_order,
-        ),
+        [
+          ...current,
+          ...uploaded.map((image) => ({
+            ...image,
+            place_name: places.find(
+              (place) => String(place.PlaceId) === placeId,
+            )?.PlaceName,
+          })),
+        ].sort(compareImages),
       );
       setSelectedFiles([]);
       setNotice(`Đã tải lên ${uploaded.length} ảnh.`);
@@ -257,9 +293,15 @@ export default function ImageManagement({
     setImages((current) =>
       current
         .map((image) =>
-          image.image_id === updated.image_id ? updated : image,
+          image.image_id === updated.image_id
+            ? {
+                ...image,
+                ...updated,
+                place_name: updated.place_name ?? image.place_name,
+              }
+            : image,
         )
-        .sort((left, right) => left.sort_order - right.sort_order),
+        .sort(compareImages),
     );
     setError("");
     setNotice("Đã cập nhật ảnh.");
@@ -275,24 +317,6 @@ export default function ImageManagement({
 
   return (
     <>
-      <section className="panel image-place-panel">
-        <label>
-          Place ID cần quản lý ảnh
-          <input
-            onChange={(event) => setPlaceId(event.target.value)}
-            placeholder="Nhập PlaceId"
-            value={placeId}
-          />
-        </label>
-        <button
-          className="button button-small"
-          disabled={loading || !token || !placeId.trim()}
-          onClick={loadImages}
-          type="button"
-        >
-          {loading ? "Đang tải..." : "Tải ảnh địa điểm"}
-        </button>
-      </section>
       <section className="panel upload-panel">
         <div className="section-heading">
           <div>
@@ -304,6 +328,27 @@ export default function ImageManagement({
           </span>
         </div>
         <form onSubmit={uploadImages}>
+          <label className="upload-place-select">
+            Địa điểm
+            <select
+              disabled={loading || places.length === 0}
+              onChange={(event) => setPlaceId(event.target.value)}
+              required
+              value={placeId}
+            >
+              <option value="" disabled>Chọn địa điểm</option>
+              {places.map((place) => (
+                <option key={place.PlaceId} value={String(place.PlaceId)}>
+                  {place.PlaceName}
+                </option>
+              ))}
+            </select>
+          </label>
+          {places.length === 0 && !loading && (
+            <p className="hint">
+              Chưa có địa điểm. Hãy tạo địa điểm trước khi tải ảnh lên.
+            </p>
+          )}
           <label className="file-picker">
             <span className="upload-icon" aria-hidden="true">↑</span>
             <span>
@@ -351,7 +396,7 @@ export default function ImageManagement({
             <span className="hint">Để trống thứ tự để tự xếp ảnh vào cuối danh sách.</span>
             <button
               className="button"
-              disabled={uploading || selectedFiles.length === 0}
+              disabled={uploading || selectedFiles.length === 0 || !placeId}
               type="submit"
             >
               {uploading ? "Đang tải ảnh..." : "Tải ảnh lên"}
@@ -363,19 +408,11 @@ export default function ImageManagement({
         <div className="section-heading gallery-heading">
           <div>
             <p className="eyebrow">PLACE IMAGES</p>
-            <h2>Ảnh của địa điểm</h2>
+            <h2>Thư viện ảnh địa điểm</h2>
           </div>
-          <div className="gallery-tools">
-            <span className="muted-count">{images.length} ảnh</span>
-            <button
-              className="button button-small"
-              disabled={loading || !token}
-              onClick={loadImages}
-              type="button"
-            >
-              {loading ? "Đang tải..." : "Tải danh sách"}
-            </button>
-          </div>
+          <span className="muted-count">
+            {loading ? "Đang tải ảnh..." : `${images.length} ảnh`}
+          </span>
         </div>
         {images.length > 0 ? (
           <div className="image-grid">
@@ -394,8 +431,10 @@ export default function ImageManagement({
         ) : (
           <div className="empty-state">
             <div className="empty-icon" aria-hidden="true">▧</div>
-            <strong>Chưa có ảnh nào được tải</strong>
-            <span>Nhập Place ID và tải danh sách để bắt đầu demo.</span>
+            <strong>{loading ? "Đang tải thư viện ảnh..." : "Chưa có ảnh nào được tải"}</strong>
+            {!loading && (
+              <span>Ảnh của các địa điểm sẽ tự hiển thị tại đây sau khi tải lên.</span>
+            )}
           </div>
         )}
       </section>

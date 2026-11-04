@@ -32,6 +32,8 @@ class Settings:
     admin_activity_logs_collection: str = "AdminActivityLogs"
     # Collection tài khoản người dùng theo ERD.
     user_accounts_collection: str = "UserAccounts"
+    saved_places_collection: str = "SavedPlaces"
+    listening_history_collection: str = "ListeningHistory"
     max_image_size_bytes: int = 10 * 1024 * 1024
 
 
@@ -70,5 +72,13 @@ def get_settings() -> Settings:
         user_accounts_collection=os.getenv(
             "MONGODB_USER_ACCOUNTS_COLLECTION",
             "UserAccounts",
+        ),
+        saved_places_collection=os.getenv(
+            "MONGODB_SAVED_PLACES_COLLECTION",
+            "SavedPlaces",
+        ),
+        listening_history_collection=os.getenv(
+            "MONGODB_LISTENING_HISTORY_COLLECTION",
+            "ListeningHistory",
         ),
     )

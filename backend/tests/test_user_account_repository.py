@@ -16,7 +16,7 @@ class FakeCursor:
     def __init__(self, items):
         self.items = items
 
-    def sort(self, _sort):
+    def sort(self, *_sort):
         return self
 
     def skip(self, _skip):
@@ -55,7 +55,20 @@ class FakeUserCollection:
             [],
         )
         if email_condition is None:
+            user_id_query = query.get("UserId")
+            alternatives = query.get("$or", [])
+            user_ids = [condition["UserId"] for condition in alternatives]
+            if user_id_query is not None:
+                user_ids.append(user_id_query)
+            for user in self.items:
+                if user.get("UserId") in user_ids:
+                    return {
+                        key: value
+                        for key, value in user.items()
+                        if projection.get(key, 0)
+                    }
             return None
+
         pattern = re.compile(email_condition["$regex"], re.IGNORECASE)
         return next(
             (
@@ -94,13 +107,19 @@ class FakeUserCollection:
 
 
 class FakeDatabase:
-    def __init__(self, collection):
-        self.collection = collection
+    def __init__(self, collection, saved_places=None, listening_history=None):
+        self.collections = {
+            "UserAccounts": collection,
+            "SavedPlaces": saved_places or FakeUserCollection([]),
+            "ListeningHistory": listening_history or FakeUserCollection([]),
+        }
         self.collection_name = None
+        self.accessed_collection_names = []
 
     def __getitem__(self, collection_name):
         self.collection_name = collection_name
-        return self.collection
+        self.accessed_collection_names.append(collection_name)
+        return self.collections.setdefault(collection_name, FakeUserCollection([]))
 
 
 class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
@@ -135,7 +154,7 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         items, total = await repository.list("test", True, 10, 5)
 
-        self.assertEqual("UserAccounts", database.collection_name)
+        self.assertEqual("UserAccounts", database.accessed_collection_names[0])
         self.assertEqual(
             {
                 "$or": [
@@ -255,6 +274,46 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("New Name", result["FullName"])
         self.assertNotIn("PasswordHash", result)
+
+    async def test_get_activity_returns_recent_records_and_totals(self):
+        user_collection = FakeUserCollection(
+            [
+                {
+                    "UserId": 7,
+                    "FullName": "Test User",
+                    "Email": "test@example.com",
+                    "PasswordHash": "must-not-be-returned",
+                    "IsActive": True,
+                }
+            ]
+        )
+        saved_places = FakeUserCollection(
+            [{"SavedPlaceId": 1, "UserId": 7, "PlaceId": 12}]
+        )
+        listening_history = FakeUserCollection(
+            [
+                {
+                    "ListeningHistoryId": 2,
+                    "UserId": 7,
+                    "AudioId": 15,
+                    "PlayedSeconds": 42,
+                    "IsCompleted": False,
+                }
+            ]
+        )
+        repository = UserAccountRepository(
+            FakeDatabase(user_collection, saved_places, listening_history),
+            self.settings,
+        )
+
+        activity = await repository.get_activity("7", 10)
+
+        self.assertEqual("Test User", activity["user"]["FullName"])
+        self.assertNotIn("PasswordHash", activity["user"])
+        self.assertEqual(1, activity["saved_places_total"])
+        self.assertEqual(12, activity["saved_places"][0]["PlaceId"])
+        self.assertEqual(1, activity["listening_history_total"])
+        self.assertEqual(15, activity["listening_history"][0]["AudioId"])
 
     async def test_service_returns_unavailable_error_on_database_failure(self):
         repository = Mock()

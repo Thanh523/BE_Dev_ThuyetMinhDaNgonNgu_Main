@@ -95,11 +95,14 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `GET` | `/api/admin/users` | Search and page user accounts (never returns password hashes) |
 | `PATCH` | `/api/admin/users/{user_id}` | Update a user's name and email |
 | `PATCH` | `/api/admin/users/{user_id}/status` | Activate or deactivate a user account |
+| `GET` | `/api/admin/users/{user_id}/activity` | View recent saved places and listening history |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and
 `limit` query parameters. User management endpoints require an admin token;
 profile and status changes are recorded in `AdminActivityLogs`. User email
-addresses are unique without case sensitivity.
+addresses are unique without case sensitivity. The activity endpoint accepts
+an optional `limit` (1-50, default 20) and reads from `SavedPlaces` and
+`ListeningHistory`.
 
 Uploads accept valid JPEG, PNG, and WebP files up to 10 MB each. If captions or
 sort orders are provided during a batch upload, provide one value per file.
@@ -112,6 +115,7 @@ Run the backend unit tests from `backend` with
 Set `MONGODB_PLACES_COLLECTION`, `MONGODB_PLACE_IMAGES_COLLECTION`,
 `MONGODB_ADMIN_ACCOUNTS_COLLECTION`,
 `MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION`, `MONGODB_USER_ACCOUNTS_COLLECTION`,
+`MONGODB_SAVED_PLACES_COLLECTION`, `MONGODB_LISTENING_HISTORY_COLLECTION`,
 `MONGODB_CATEGORIES_COLLECTION`,
 `MONGODB_COUNTERS_COLLECTION`, `IMAGE_STORAGE_DIR`, and `CORS_ORIGINS` to
 override the defaults. The MongoDB database and collection names and file

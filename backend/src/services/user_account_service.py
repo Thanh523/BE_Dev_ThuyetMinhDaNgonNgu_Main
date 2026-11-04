@@ -89,3 +89,16 @@ class UserAccountService:
         if user is None:
             raise HTTPException(status_code=404, detail="User account was not found.")
         return user
+
+    # Lấy lịch sử địa điểm đã lưu và nghe audio của một user.
+    async def get_activity(self, user_id: str, limit: int) -> dict:
+        try:
+            activity = await self.repository.get_activity(user_id, limit)
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="User activity is temporarily unavailable.",
+            ) from error
+        if activity is None:
+            raise HTTPException(status_code=404, detail="User account was not found.")
+        return activity

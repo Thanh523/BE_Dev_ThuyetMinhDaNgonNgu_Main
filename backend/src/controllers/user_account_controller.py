@@ -57,6 +57,31 @@ class UserProfileUpdate(BaseModel):
         return self
 
 
+class SavedPlaceActivity(BaseModel):
+    saved_place_id: int | str | None = Field(default=None, alias="SavedPlaceId")
+    place_id: int | str = Field(alias="PlaceId")
+    saved_at: datetime | None = Field(default=None, alias="SavedAt")
+
+
+class ListeningHistoryActivity(BaseModel):
+    listening_history_id: int | str | None = Field(
+        default=None,
+        alias="ListeningHistoryId",
+    )
+    audio_id: int | str = Field(alias="AudioId")
+    listened_at: datetime | None = Field(default=None, alias="ListenedAt")
+    played_seconds: int | float = Field(alias="PlayedSeconds")
+    is_completed: bool = Field(alias="IsCompleted")
+
+
+class UserActivityView(BaseModel):
+    user: UserView
+    saved_places: list[SavedPlaceActivity]
+    saved_places_total: int
+    listening_history: list[ListeningHistoryActivity]
+    listening_history_total: int
+
+
 def _service(database) -> UserAccountService:
     # Tạo service và repository cho request hiện tại.
     return UserAccountService(
@@ -149,3 +174,13 @@ async def update_user_profile(
             ),
         ) from error
     return user
+
+
+@router.get("/{user_id}/activity", response_model=UserActivityView)
+async def get_user_activity(
+    user_id: str,
+    limit: int = Query(default=20, ge=1, le=50),
+    database=Depends(get_database),
+) -> dict:
+    # Trả các hoạt động gần đây cùng tổng số; chỉ đọc và giới hạn kết quả.
+    return await _service(database).get_activity(user_id, limit)

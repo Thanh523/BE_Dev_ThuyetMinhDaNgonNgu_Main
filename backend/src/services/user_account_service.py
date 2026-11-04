@@ -1,12 +1,9 @@
 import re
-import uuid
-from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from src.repositories.user_account_repository import UserAccountRepository
-from src.services.admin_auth_service import hash_password
 
 
 class UserAccountService:
@@ -105,59 +102,3 @@ class UserAccountService:
         if activity is None:
             raise HTTPException(status_code=404, detail="User account was not found.")
         return activity
-
-    # Tạo user mới với mật khẩu được băm, không lưu hoặc trả mật khẩu gốc.
-    async def create_user(self, full_name: str, email: str, password: str) -> dict:
-        normalized_name = full_name.strip()
-        normalized_email = email.strip().casefold()
-        if not normalized_name:
-            raise HTTPException(status_code=422, detail="Full name is required.")
-        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized_email):
-            raise HTTPException(status_code=422, detail="Email address is invalid.")
-        if len(password) < 12:
-            raise HTTPException(
-                status_code=422,
-                detail="Password must contain at least 12 characters.",
-            )
-        if len(password) > 128:
-            raise HTTPException(
-                status_code=422,
-                detail="Password must be no longer than 128 characters.",
-            )
-
-        user_id = uuid.uuid4().hex
-        try:
-            if await self.repository.email_exists(normalized_email):
-                raise HTTPException(
-                    status_code=409,
-                    detail="Email address is already used by another account.",
-                )
-            user = {
-                "UserId": user_id,
-                "FullName": normalized_name,
-                "Email": normalized_email,
-                "PasswordHash": hash_password(password),
-                "IsActive": True,
-                "CreatedAt": datetime.now(timezone.utc),
-                "LastLoginAt": None,
-            }
-            await self.repository.create(user)
-        except DuplicateKeyError as error:
-            raise HTTPException(
-                status_code=409,
-                detail="Email address is already used by another account.",
-            ) from error
-        except PyMongoError as error:
-            raise HTTPException(
-                status_code=503,
-                detail="User account could not be created.",
-            ) from error
-
-        return {
-            "UserId": user_id,
-            "FullName": normalized_name,
-            "Email": normalized_email,
-            "IsActive": True,
-            "CreatedAt": user["CreatedAt"],
-            "LastLoginAt": None,
-        }

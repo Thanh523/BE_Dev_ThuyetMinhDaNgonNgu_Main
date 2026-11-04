@@ -113,10 +113,6 @@ class UserAccountRepository:
             },
         )
 
-    async def create(self, user: dict) -> None:
-        # Chèn tài khoản đã được service băm mật khẩu.
-        await self.users.insert_one(user)
-
     async def get_activity(self, user_id: str, limit: int) -> dict | None:
         # Lấy profile an toàn trước; user không tồn tại thì không truy vấn lịch sử.
         user = await self.users.find_one(

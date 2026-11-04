@@ -93,17 +93,15 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
 | `DELETE` | `/api/admin/categories/{category_id}` | Delete an unused category |
 | `GET` | `/api/admin/users` | Search and page user accounts (never returns password hashes) |
-| `POST` | `/api/admin/users` | Create a user with an admin-provided initial password |
 | `PATCH` | `/api/admin/users/{user_id}` | Update a user's name and email |
 | `PATCH` | `/api/admin/users/{user_id}/status` | Activate or deactivate a user account |
 | `GET` | `/api/admin/users/{user_id}/activity` | View recent saved places, listening history, and visitor sessions |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and
 `limit` query parameters. User management endpoints require an admin token;
-create, profile, and status changes are recorded in `AdminActivityLogs`.
-Created users are active by default; their initial password must be 12-128
-characters and is stored only as an Argon2 hash. User email addresses are
-unique without case sensitivity. The activity endpoint accepts
+profile and status changes are recorded in `AdminActivityLogs`. The admin user
+management API does not create user accounts. User email addresses are unique
+without case sensitivity. The activity endpoint accepts
 an optional `limit` (1-50, default 20) and reads from `SavedPlaces`,
 `ListeningHistory`, and `VisitorSessions`.
 

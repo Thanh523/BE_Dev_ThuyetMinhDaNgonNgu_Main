@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pymongo.errors import PyMongoError
 
@@ -42,12 +42,6 @@ class UserPage(BaseModel):
 
 class UserStatusUpdate(BaseModel):
     is_active: bool
-
-
-class UserCreate(BaseModel):
-    full_name: str = Field(min_length=1, max_length=200)
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=12, max_length=128)
 
 
 class UserProfileUpdate(BaseModel):
@@ -121,40 +115,6 @@ async def list_users(
         limit,
     )
     return {"items": items, "total": total, "skip": skip, "limit": limit}
-
-
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=UserView)
-async def create_user(
-    request: UserCreate,
-    database=Depends(get_database),
-    admin_claims: dict = Depends(require_admin),
-) -> dict:
-    # Tạo tài khoản hoạt động, băm mật khẩu và ghi nhật ký thao tác admin.
-    user = await _service(database).create_user(
-        request.full_name,
-        request.email,
-        request.password,
-    )
-    settings = get_settings()
-    try:
-        await log_admin_activity(
-            database,
-            settings.admin_activity_logs_collection,
-            admin_id=admin_claims["AdminId"],
-            action="CREATE",
-            entity_name="UserAccounts",
-            entity_id=str(user["UserId"]),
-            description="Created user account.",
-        )
-    except PyMongoError as error:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "The user account was created, but its activity log could not "
-                "be saved. Contact an administrator before retrying."
-            ),
-        ) from error
-    return user
 
 
 @router.patch("/{user_id}/status", response_model=UserView)

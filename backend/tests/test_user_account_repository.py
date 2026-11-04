@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 from fastapi import HTTPException
-from pymongo.errors import DuplicateKeyError, PyMongoError
+from pymongo.errors import PyMongoError
 
 from src.config.settings import Settings
 from src.repositories.user_account_repository import UserAccountRepository
@@ -93,20 +93,6 @@ class FakeUserCollection:
                     if projection.get(key, 0)
                 }
         return None
-
-    async def insert_one(self, document):
-        if await self.find_one(
-            {
-                "Email": {
-                    "$regex": f"^{re.escape(document['Email'])}$",
-                    "$options": "i",
-                }
-            },
-            {"_id": 1},
-        ):
-            raise DuplicateKeyError("duplicate email")
-        self.items.append(document)
-
 
 class FakeDatabase:
     def __init__(
@@ -262,50 +248,6 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(409, raised.exception.status_code)
         repository.update_profile.assert_not_called()
-
-    async def test_create_user_hashes_password_and_returns_no_hash(self):
-        collection = FakeUserCollection([])
-        repository = UserAccountRepository(FakeDatabase(collection), self.settings)
-        service = UserAccountService(repository)
-
-        result = await service.create_user(
-            " New User ",
-            "NEW@example.com",
-            "a-long-initial-password",
-        )
-
-        stored_user = collection.items[0]
-        self.assertEqual("New User", stored_user["FullName"])
-        self.assertEqual("new@example.com", stored_user["Email"])
-        self.assertNotEqual("a-long-initial-password", stored_user["PasswordHash"])
-        self.assertNotIn("PasswordHash", result)
-        self.assertTrue(stored_user["IsActive"])
-
-    async def test_create_user_rejects_short_password(self):
-        repository = Mock()
-        service = UserAccountService(repository)
-
-        with self.assertRaises(HTTPException) as raised:
-            await service.create_user("New User", "new@example.com", "short")
-
-        self.assertEqual(422, raised.exception.status_code)
-        repository.create.assert_not_called()
-
-    async def test_create_user_rejects_duplicate_email(self):
-        repository = Mock()
-        repository.email_exists = AsyncMock(return_value=True)
-        repository.create = AsyncMock()
-        service = UserAccountService(repository)
-
-        with self.assertRaises(HTTPException) as raised:
-            await service.create_user(
-                "New User",
-                "taken@example.com",
-                "a-long-initial-password",
-            )
-
-        self.assertEqual(409, raised.exception.status_code)
-        repository.create.assert_not_called()
 
     async def test_profile_update_only_returns_public_fields(self):
         users = [

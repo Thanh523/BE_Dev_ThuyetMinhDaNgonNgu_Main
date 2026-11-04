@@ -80,12 +80,21 @@ class ListeningHistoryActivity(BaseModel):
     is_completed: bool = Field(alias="IsCompleted")
 
 
+class VisitorSessionActivity(BaseModel):
+    session_id: int | str = Field(alias="SessionId")
+    started_at: datetime | None = Field(default=None, alias="StartedAt")
+    last_reported_at: datetime | None = Field(default=None, alias="LastReportedAt")
+    ended_at: datetime | None = Field(default=None, alias="EndedAt")
+
+
 class UserActivityView(BaseModel):
     user: UserView
     saved_places: list[SavedPlaceActivity]
     saved_places_total: int
     listening_history: list[ListeningHistoryActivity]
     listening_history_total: int
+    visitor_sessions: list[VisitorSessionActivity]
+    visitor_sessions_total: int
 
 
 def _service(database) -> UserAccountService:

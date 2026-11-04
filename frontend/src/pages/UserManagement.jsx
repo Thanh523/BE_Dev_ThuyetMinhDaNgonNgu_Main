@@ -407,6 +407,37 @@ export default function UserManagement({
           <div className="user-activity-grid">
             <section className="user-activity-card">
               <div className="section-heading">
+                <h3>Phiên truy cập</h3>
+                <span className="muted-count">
+                  {activity.visitor_sessions_total} phiên
+                </span>
+              </div>
+              {activity.visitor_sessions.length > 0 ? (
+                <ul className="user-activity-list">
+                  {activity.visitor_sessions.map((session) => (
+                    <li key={session.SessionId}>
+                      <strong>Phiên {session.SessionId}</strong>
+                      <span>
+                        Bắt đầu: {formatDate(session.StartedAt)} ·{" "}
+                        {session.EndedAt
+                          ? `Kết thúc: ${formatDate(session.EndedAt)}`
+                          : "Đang hoạt động"}
+                      </span>
+                      {session.LastReportedAt && (
+                        <span>
+                          Cập nhật lần cuối: {formatDate(session.LastReportedAt)}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="user-activity-empty">Chưa có phiên truy cập.</p>
+              )}
+            </section>
+
+            <section className="user-activity-card">
+              <div className="section-heading">
                 <h3>Địa điểm đã lưu</h3>
                 <span className="muted-count">
                   {activity.saved_places_total} mục

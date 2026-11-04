@@ -109,11 +109,18 @@ class FakeUserCollection:
 
 
 class FakeDatabase:
-    def __init__(self, collection, saved_places=None, listening_history=None):
+    def __init__(
+        self,
+        collection,
+        saved_places=None,
+        listening_history=None,
+        visitor_sessions=None,
+    ):
         self.collections = {
             "UserAccounts": collection,
             "SavedPlaces": saved_places or FakeUserCollection([]),
             "ListeningHistory": listening_history or FakeUserCollection([]),
+            "VisitorSessions": visitor_sessions or FakeUserCollection([]),
         }
         self.collection_name = None
         self.accessed_collection_names = []
@@ -347,8 +354,24 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 }
             ]
         )
+        visitor_sessions = FakeUserCollection(
+            [
+                {
+                    "SessionId": "session-3",
+                    "UserId": 7,
+                    "StartedAt": "2026-11-01T10:00:00Z",
+                    "LastReportedAt": "2026-11-01T10:15:00Z",
+                    "EndedAt": None,
+                }
+            ]
+        )
         repository = UserAccountRepository(
-            FakeDatabase(user_collection, saved_places, listening_history),
+            FakeDatabase(
+                user_collection,
+                saved_places,
+                listening_history,
+                visitor_sessions,
+            ),
             self.settings,
         )
 
@@ -360,6 +383,8 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(12, activity["saved_places"][0]["PlaceId"])
         self.assertEqual(1, activity["listening_history_total"])
         self.assertEqual(15, activity["listening_history"][0]["AudioId"])
+        self.assertEqual(1, activity["visitor_sessions_total"])
+        self.assertEqual("session-3", activity["visitor_sessions"][0]["SessionId"])
 
     async def test_service_returns_unavailable_error_on_database_failure(self):
         repository = Mock()

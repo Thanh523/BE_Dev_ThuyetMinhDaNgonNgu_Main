@@ -12,6 +12,7 @@ class UserAccountRepository:
         self.users = database[settings.user_accounts_collection]
         self.saved_places = database[settings.saved_places_collection]
         self.listening_history = database[settings.listening_history_collection]
+        self.visitor_sessions = database[settings.visitor_sessions_collection]
 
     @staticmethod
     def _user_id_query(user_id: str) -> dict:
@@ -173,10 +174,31 @@ class UserAccountRepository:
             related_query,
         )
 
+        # Lấy các phiên truy cập mới nhất của user và tổng số phiên.
+        sessions_cursor = self.visitor_sessions.find(
+            related_query,
+            {
+                "_id": 0,
+                "SessionId": 1,
+                "StartedAt": 1,
+                "LastReportedAt": 1,
+                "EndedAt": 1,
+            },
+        )
+        visitor_sessions = await sessions_cursor.sort(
+            "StartedAt",
+            -1,
+        ).limit(limit).to_list(length=limit)
+        visitor_sessions_total = await self.visitor_sessions.count_documents(
+            related_query,
+        )
+
         return {
             "user": user,
             "saved_places": saved_places,
             "saved_places_total": saved_places_total,
             "listening_history": listening_history,
             "listening_history_total": listening_history_total,
+            "visitor_sessions": visitor_sessions,
+            "visitor_sessions_total": visitor_sessions_total,
         }

@@ -23,7 +23,7 @@ After login, use the separate **Địa điểm**, **Hình ảnh**, **Danh mục*
 **Người dùng** pages. The user page searches accounts by name/email, filters
 by active status, pages through results, and lets an admin lock or unlock an
 account, edit the user's name and email, and view saved places and listening
-history when available. Admins can create accounts with an initial password
+history, and visitor sessions when available. Admins can create accounts with an initial password
 of at least 12 characters. The places page supports place
 CRUD, detail view, search, filters, visibility toggling, and safe deletion
 checks. The categories page supports category CRUD. The images page can list a

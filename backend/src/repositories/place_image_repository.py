@@ -24,6 +24,55 @@ class PlaceImageRepository:
         )
         return await cursor.to_list(length=None)
 
+    async def list_all_with_place_names(self) -> list[dict]:
+        cursor = await self.images.aggregate(
+            [
+                {
+                    "$lookup": {
+                        "from": self.places.name,
+                        "localField": "PlaceId",
+                        "foreignField": "PlaceId",
+                        "as": "_place",
+                    }
+                },
+                {
+                    "$unwind": {
+                        "path": "$_place",
+                        "preserveNullAndEmptyArrays": True,
+                    }
+                },
+                {
+                    "$addFields": {
+                        "PlaceName": {
+                            "$ifNull": ["$_place.PlaceName", "Địa điểm không tồn tại"]
+                        }
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "ImageId": 1,
+                        "PlaceId": 1,
+                        "PlaceName": 1,
+                        "FileUrl": 1,
+                        "SortOrder": 1,
+                        "Caption": 1,
+                        "CreatedAt": 1,
+                        "UpdatedAt": 1,
+                    }
+                },
+                {
+                    "$sort": {
+                        "PlaceName": 1,
+                        "SortOrder": 1,
+                        "CreatedAt": 1,
+                        "ImageId": 1,
+                    }
+                },
+            ]
+        )
+        return await cursor.to_list(length=None)
+
     async def next_sort_order(self, place_id: int | str) -> int:
         image = await self.images.find_one(
             {"PlaceId": place_id},

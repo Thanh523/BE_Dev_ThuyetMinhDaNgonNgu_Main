@@ -28,6 +28,7 @@ class ImageView(BaseModel):
 
     image_id: str = Field(alias="ImageId")
     place_id: int | str = Field(alias="PlaceId")
+    place_name: str | None = Field(default=None, alias="PlaceName")
     file_url: str = Field(alias="FileUrl")
     sort_order: int = Field(alias="SortOrder")
     caption: str = Field(alias="Caption")
@@ -91,6 +92,15 @@ async def list_place_images(
     database=Depends(get_database),
 ) -> list[dict]:
     return await _service(database).list_for_place(parse_place_id(place_id))
+
+
+@router.get(
+    "/images",
+    response_model=list[ImageView],
+    response_model_by_alias=False,
+)
+async def list_all_images(database=Depends(get_database)) -> list[dict]:
+    return await _service(database).list_all()
 
 
 @router.post(

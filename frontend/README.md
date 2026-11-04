@@ -24,7 +24,9 @@ pages. The places page supports place CRUD, detail view, search, filters,
 visibility toggling, and safe deletion checks. The categories page supports
 category CRUD. The images page can list a place's images, upload JPEG/PNG/WebP
 files (up to 10 MB each), update captions and sort order, and delete images.
-Leaving all sort orders blank lets the backend append uploaded images
-automatically. The backend CORS configuration must include the frontend's
-origin if it has been changed from its defaults. See the repository README for
-creating the first admin account and configuring the JWT signing key.
+The image library loads automatically and shows images from all places; choose
+a place by name only when uploading. Leaving all sort orders blank lets the
+backend append uploaded images automatically. The backend CORS configuration
+must include the frontend's origin if it has been changed from its defaults.
+See the repository README for creating the first admin account and configuring
+the JWT signing key.

@@ -49,6 +49,9 @@ class ImageService:
             raise HTTPException(status_code=404, detail="Place was not found.")
         return await self.repository.list_for_place(place_id)
 
+    async def list_all(self) -> list[dict]:
+        return await self.repository.list_all_with_place_names()
+
     async def upload(
         self,
         place_id: int | str,

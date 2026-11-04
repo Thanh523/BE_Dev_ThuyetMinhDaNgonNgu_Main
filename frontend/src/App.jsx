@@ -2,6 +2,7 @@ import { useState } from "react";
 import CategoryManagement from "./pages/CategoryManagement.jsx";
 import ImageManagement from "./pages/ImageManagement.jsx";
 import PlaceManagement from "./pages/PlaceManagement.jsx";
+import UserManagement from "./pages/UserManagement.jsx";
 
 const DEFAULT_API_URL = "http://localhost:8000";
 
@@ -187,6 +188,14 @@ export default function App() {
           >
             Danh mục
           </button>
+          <button
+            aria-pressed={activePage === "users"}
+            className={activePage === "users" ? "active" : ""}
+            onClick={() => setActivePage("users")}
+            type="button"
+          >
+            Người dùng
+          </button>
         </nav>
       )}
 
@@ -211,6 +220,13 @@ export default function App() {
           apiUrl={apiUrl}
           setError={setError}
           setNotice={setNotice}
+          token={normalizedAuthToken}
+        />
+      )}
+      {token && activePage === "users" && (
+        <UserManagement
+          apiUrl={apiUrl}
+          setError={setError}
           token={normalizedAuthToken}
         />
       )}

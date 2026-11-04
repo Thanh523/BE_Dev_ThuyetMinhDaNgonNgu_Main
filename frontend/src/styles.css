@@ -621,6 +621,28 @@ input::placeholder {
   min-width: 620px;
 }
 
+.user-filters {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.5fr) minmax(160px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.user-table-wrap {
+  margin-top: 8px;
+}
+
+.user-table {
+  min-width: 760px;
+}
+
+.user-empty {
+  height: 100px;
+  color: var(--muted);
+  text-align: center;
+}
+
 .category-description {
   max-width: 480px;
   color: #59645b;
@@ -761,6 +783,10 @@ input::placeholder {
     grid-template-columns: 1fr 1fr;
   }
 
+  .user-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .place-table {
     min-width: 820px;
   }
@@ -803,6 +829,7 @@ input::placeholder {
 
   .place-form,
   .place-filters,
+  .user-filters,
   .detail-grid {
     grid-template-columns: 1fr;
   }

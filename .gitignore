@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 backend/atlas-credentials.env
+backend/src/atlas_credential.env
 backend/uploads/.images-staging/
+backend/uploads/audio/
 frontend/node_modules/
 frontend/dist/

@@ -6,3 +6,5 @@ python-multipart>=0.0.20
 Pillow>=11,<13
 python-dotenv>=1.0,<2
 argon2-cffi>=23.1,<26
+edge-tts>=7,<8
+deep-translator>=1.11,<2

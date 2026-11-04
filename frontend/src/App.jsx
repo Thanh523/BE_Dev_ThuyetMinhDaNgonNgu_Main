@@ -2,6 +2,7 @@ import { useState } from "react";
 import CategoryManagement from "./pages/CategoryManagement.jsx";
 import ImageManagement from "./pages/ImageManagement.jsx";
 import PlaceManagement from "./pages/PlaceManagement.jsx";
+import AudioManagement from "./pages/AudioManagement.jsx";
 
 const DEFAULT_API_URL = "http://localhost:8000";
 
@@ -187,6 +188,14 @@ export default function App() {
           >
             Danh mục
           </button>
+          <button
+            aria-pressed={activePage === "audio"}
+            className={activePage === "audio" ? "active" : ""}
+            onClick={() => setActivePage("audio")}
+            type="button"
+          >
+            Audio
+          </button>
         </nav>
       )}
 
@@ -208,6 +217,14 @@ export default function App() {
       )}
       {token && activePage === "categories" && (
         <CategoryManagement
+          apiUrl={apiUrl}
+          setError={setError}
+          setNotice={setNotice}
+          token={normalizedAuthToken}
+        />
+      )}
+      {token && activePage === "audio" && (
+        <AudioManagement
           apiUrl={apiUrl}
           setError={setError}
           setNotice={setNotice}

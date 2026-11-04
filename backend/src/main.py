@@ -9,6 +9,7 @@ from src.routes import routers
 
 settings = get_settings()
 settings.image_storage_dir.mkdir(parents=True, exist_ok=True)
+settings.audio_storage_dir.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title="Multilingual Guide API",
@@ -28,4 +29,9 @@ app.mount(
     "/uploads/images",
     StaticFiles(directory=str(settings.image_storage_dir)),
     name="uploaded-images",
+)
+app.mount(
+    "/uploads/audio",
+    StaticFiles(directory=str(settings.audio_storage_dir)),
+    name="uploaded-audio",
 )

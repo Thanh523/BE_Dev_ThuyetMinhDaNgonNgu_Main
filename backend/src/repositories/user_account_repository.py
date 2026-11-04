@@ -77,22 +77,22 @@ class UserAccountRepository:
             },
         )
 
-    async def email_exists(self, email: str, user_id: str) -> bool:
-        # Email được so sánh không phân biệt hoa thường và loại trừ chính user đang sửa.
-        user_ids: list[str | int] = [user_id]
-        if user_id.isdecimal() and str(int(user_id)) == user_id:
-            user_ids.append(int(user_id))
-        query = {
-            "$and": [
-                {
-                    "Email": {
-                        "$regex": f"^{re.escape(email)}$",
-                        "$options": "i",
-                    }
-                },
-                {"UserId": {"$nin": user_ids}},
-            ]
+    async def email_exists(self, email: str, exclude_user_id: str | None = None) -> bool:
+        # Email được so sánh không phân biệt hoa thường.
+        query: dict = {
+            "Email": {
+                "$regex": f"^{re.escape(email)}$",
+                "$options": "i",
+            }
         }
+        if exclude_user_id is not None:
+            user_ids: list[str | int] = [exclude_user_id]
+            if (
+                exclude_user_id.isdecimal()
+                and str(int(exclude_user_id)) == exclude_user_id
+            ):
+                user_ids.append(int(exclude_user_id))
+            query["UserId"] = {"$nin": user_ids}
         return await self.users.find_one(query, {"_id": 1}) is not None
 
     async def update_profile(self, user_id: str, changes: dict) -> dict | None:
@@ -111,6 +111,10 @@ class UserAccountRepository:
                 "LastLoginAt": 1,
             },
         )
+
+    async def create(self, user: dict) -> None:
+        # Chèn tài khoản đã được service băm mật khẩu.
+        await self.users.insert_one(user)
 
     async def get_activity(self, user_id: str, limit: int) -> dict | None:
         # Lấy profile an toàn trước; user không tồn tại thì không truy vấn lịch sử.

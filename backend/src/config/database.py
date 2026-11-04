@@ -69,6 +69,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             unique=True,
             collation=Collation(locale="en", strength=2),
         )
+        await database[settings.user_accounts_collection].create_index(
+            [("UserId", ASCENDING)],
+            unique=True,
+        )
         app.state.mongo_client = client
         app.state.database = database
         yield

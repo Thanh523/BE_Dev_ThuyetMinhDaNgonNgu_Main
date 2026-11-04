@@ -51,6 +51,12 @@ export default function UserManagement({
   const [editingUser, setEditingUser] = useState(null);
   const [profileForm, setProfileForm] = useState({ full_name: "", email: "" });
   const [activity, setActivity] = useState(null);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    full_name: "",
+    email: "",
+    password: "",
+  });
 
   // Tải một trang user theo bộ lọc đã áp dụng; API chỉ trả dữ liệu an toàn để hiển thị.
   const loadUsers = useCallback(async (offset, activeFilters) => {
@@ -160,6 +166,29 @@ export default function UserManagement({
     }
   }
 
+  // Tạo user mới; chỉ gửi mật khẩu qua request để backend băm và lưu hash.
+  async function createUser(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await adminRequest(apiUrl, token, "/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify(createForm),
+      });
+      setCreatingUser(false);
+      setCreateForm({ full_name: "", email: "", password: "" });
+      setSkip(0);
+      setNotice("Đã tạo tài khoản người dùng.");
+      await loadUsers(0, filters);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Tải hoạt động gần đây của user; endpoint chỉ đọc dữ liệu liên quan.
   async function viewActivity(user) {
     setBusy(true);
@@ -192,6 +221,96 @@ export default function UserManagement({
         </div>
         <span className="muted-count">{total} người dùng</span>
       </div>
+
+      <div className="user-create-toolbar">
+        {!creatingUser && (
+          <button
+            className="button"
+            disabled={busy}
+            onClick={() => {
+              setCreatingUser(true);
+              setEditingUser(null);
+              setError("");
+              setNotice("");
+            }}
+            type="button"
+          >
+            Thêm người dùng
+          </button>
+        )}
+      </div>
+
+      {creatingUser && (
+        <form className="user-profile-form" onSubmit={createUser}>
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">TẠO TÀI KHOẢN</p>
+              <h2>Người dùng mới</h2>
+            </div>
+          </div>
+          <div className="user-profile-fields user-create-fields">
+            <label>
+              Họ tên
+              <input
+                maxLength={200}
+                onChange={(event) => setCreateForm((current) => ({
+                  ...current,
+                  full_name: event.target.value,
+                }))}
+                required
+                value={createForm.full_name}
+              />
+            </label>
+            <label>
+              Email
+              <input
+                maxLength={254}
+                onChange={(event) => setCreateForm((current) => ({
+                  ...current,
+                  email: event.target.value,
+                }))}
+                required
+                type="email"
+                value={createForm.email}
+              />
+            </label>
+            <label>
+              Mật khẩu ban đầu (ít nhất 12 ký tự)
+              <input
+                autoComplete="new-password"
+                maxLength={128}
+                minLength={12}
+                onChange={(event) => setCreateForm((current) => ({
+                  ...current,
+                  password: event.target.value,
+                }))}
+                required
+                type="password"
+                value={createForm.password}
+              />
+            </label>
+          </div>
+          <p className="hint">
+            Mật khẩu được băm ở backend và không hiển thị lại sau khi tạo.
+          </p>
+          <div className="user-profile-actions">
+            <button className="button" disabled={busy} type="submit">
+              Tạo tài khoản
+            </button>
+            <button
+              className="button button-outline"
+              disabled={busy}
+              onClick={() => {
+                setCreatingUser(false);
+                setCreateForm({ full_name: "", email: "", password: "" });
+              }}
+              type="button"
+            >
+              Hủy
+            </button>
+          </div>
+        </form>
+      )}
 
       <form className="user-filters" onSubmit={applyFilters}>
         <label>

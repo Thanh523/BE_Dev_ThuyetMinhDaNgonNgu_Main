@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from pymongo import ReturnDocument
@@ -22,6 +23,12 @@ class UserAccountRepository:
             return {"$or": [{"UserId": user_id}, {"UserId": int(user_id)}]}
         return {"UserId": user_id}
 
+    @classmethod
+    def _not_deleted_query(cls, query: dict) -> dict:
+        if "$or" in query:
+            return {"$and": [query, {"IsDeleted": {"$ne": True}}]}
+        return {**query, "IsDeleted": {"$ne": True}}
+
     async def list(
         self,
         search: str,
@@ -30,7 +37,7 @@ class UserAccountRepository:
         limit: int,
     ) -> tuple[list[dict], int]:
         # Tạo điều kiện tìm kiếm tên/email và lọc trạng thái nếu được yêu cầu.
-        query: dict = {}
+        query: dict = {"IsDeleted": {"$ne": True}}
         normalized_search = search.strip()
         if normalized_search:
             escaped_search = re.escape(normalized_search)
@@ -65,7 +72,7 @@ class UserAccountRepository:
     async def update_status(self, user_id: str, is_active: bool) -> dict | None:
         # Trả về bản ghi vừa cập nhật nhưng chỉ với các trường an toàn cho API.
         return await self.users.find_one_and_update(
-            self._user_id_query(user_id),
+            self._not_deleted_query(self._user_id_query(user_id)),
             {"$set": {"IsActive": is_active}},
             return_document=ReturnDocument.AFTER,
             projection={
@@ -100,7 +107,7 @@ class UserAccountRepository:
     async def update_profile(self, user_id: str, changes: dict) -> dict | None:
         # Chỉ cập nhật họ tên/email và chỉ trả về các trường an toàn cho API.
         return await self.users.find_one_and_update(
-            self._user_id_query(user_id),
+            self._not_deleted_query(self._user_id_query(user_id)),
             {"$set": changes},
             return_document=ReturnDocument.AFTER,
             projection={
@@ -121,7 +128,7 @@ class UserAccountRepository:
     async def get_activity(self, user_id: str, limit: int) -> dict | None:
         # Lấy profile an toàn trước; user không tồn tại thì không truy vấn lịch sử.
         user = await self.users.find_one(
-            self._user_id_query(user_id),
+            self._not_deleted_query(self._user_id_query(user_id)),
             {
                 "_id": 0,
                 "UserId": 1,
@@ -205,8 +212,8 @@ class UserAccountRepository:
         }
 
     async def delete_if_unrelated(self, user_id: str) -> dict | None:
-        # Chỉ cho phép xóa user khi không còn dữ liệu hoạt động tham chiếu đến user.
-        user_query = self._user_id_query(user_id)
+        # Giữ lại hồ sơ để hoạt động ghi đồng thời không tạo dữ liệu mồ côi.
+        user_query = self._not_deleted_query(self._user_id_query(user_id))
         user = await self.users.find_one(user_query, {"_id": 0, "UserId": 1})
         if user is None:
             return None
@@ -246,7 +253,16 @@ class UserAccountRepository:
         if any(related_counts.values()):
             return {"deleted": False, "related_counts": related_counts}
 
-        result = await self.users.delete_one(user_query)
-        if result.deleted_count != 1:
+        result = await self.users.update_one(
+            user_query,
+            {
+                "$set": {
+                    "IsDeleted": True,
+                    "IsActive": False,
+                    "DeletedAt": datetime.now(timezone.utc),
+                }
+            },
+        )
+        if result.modified_count != 1:
             return None
         return {"deleted": True, "related_counts": related_counts}

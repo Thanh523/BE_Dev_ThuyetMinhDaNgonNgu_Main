@@ -26,7 +26,9 @@ account, edit the user's name and email, and view saved places and listening
 history and visitor sessions when available. The admin page manages existing
 user accounts. It currently has a temporary admin-only test-user creation form;
 remove it after self-service user registration is implemented. Admins can
-delete a user only if no related activity records remain. The places page
+soft-delete a user only if no related activity records remain. This disables
+the account and hides it from the list while retaining the account record and
+activity history in MongoDB. The places page
 supports place
 CRUD, detail view, search, filters, visibility toggling, and safe deletion
 checks. The categories page supports category CRUD. The images page can list a

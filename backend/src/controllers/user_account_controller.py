@@ -196,7 +196,7 @@ async def delete_user(
     database=Depends(get_database),
     admin_claims: dict = Depends(require_admin),
 ) -> None:
-    # Xóa user khi không có dữ liệu liên quan rồi ghi lại thao tác admin.
+    # Xóa mềm user khi không có dữ liệu liên quan rồi ghi lại thao tác admin.
     await _service(database).delete_user(user_id)
     settings = get_settings()
     try:
@@ -207,13 +207,13 @@ async def delete_user(
             action="DELETE",
             entity_name="UserAccounts",
             entity_id=user_id,
-            description="Deleted user account without related activity records.",
+            description="Soft-deleted user account; user data was retained.",
         )
     except PyMongoError as error:
         raise HTTPException(
             status_code=503,
             detail=(
-                "The user account was deleted, but its activity log could not "
+                "The user account was disabled, but its activity log could not "
                 "be saved. Contact an administrator before retrying."
             ),
         ) from error

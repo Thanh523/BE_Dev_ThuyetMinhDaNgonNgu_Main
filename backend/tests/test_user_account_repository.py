@@ -34,23 +34,38 @@ class FakeUserCollection:
     def __init__(self, items):
         self.items = items
         self.find_arguments = None
+        self.before_update = None
+
+    @classmethod
+    def matches(cls, query, item):
+        for key, expected in query.items():
+            if key == "$and":
+                if not all(cls.matches(condition, item) for condition in expected):
+                    return False
+                continue
+            if key == "$or":
+                if not any(cls.matches(condition, item) for condition in expected):
+                    return False
+                continue
+            actual = item.get(key)
+            if isinstance(expected, dict):
+                if "$ne" in expected and actual == expected["$ne"]:
+                    return False
+                if "$in" in expected and actual not in expected["$in"]:
+                    return False
+                if "$nin" in expected and actual in expected["$nin"]:
+                    return False
+                if "$regex" in expected:
+                    flags = re.IGNORECASE if expected.get("$options") == "i" else 0
+                    if not re.search(expected["$regex"], str(actual or ""), flags):
+                        return False
+            elif actual != expected:
+                return False
+        return True
 
     def find(self, query, projection):
         self.find_arguments = (query, projection)
-        if "UserId" in query:
-            allowed_ids = query["UserId"].get("$in", [])
-            matched = [
-                item for item in self.items
-                if item.get("UserId") in allowed_ids
-            ]
-        elif "SessionId" in query:
-            allowed_ids = query["SessionId"].get("$in", [])
-            matched = [
-                item for item in self.items
-                if item.get("SessionId") in allowed_ids
-            ]
-        else:
-            matched = self.items
+        matched = [item for item in self.items if self.matches(query, item)]
         projected = [
             {key: value for key, value in item.items() if projection.get(key, 0)}
             for item in matched
@@ -59,47 +74,21 @@ class FakeUserCollection:
 
     async def find_one(self, query, projection):
         self.exists_arguments = (query, projection)
-        email_condition = query.get("Email")
-        user_id_condition = query.get("UserId", {})
-        excluded_user_ids = (
-            user_id_condition.get("$nin", [])
-            if isinstance(user_id_condition, dict)
-            else []
-        )
-        if email_condition is None:
-            user_id_query = query.get("UserId")
-            alternatives = query.get("$or", [])
-            user_ids = [condition["UserId"] for condition in alternatives]
-            if user_id_query is not None:
-                user_ids.append(user_id_query)
-            for user in self.items:
-                if user.get("UserId") in user_ids:
-                    return {
-                        key: value
-                        for key, value in user.items()
-                        if projection.get(key, 0)
-                    }
-            return None
-
-        pattern = re.compile(email_condition["$regex"], re.IGNORECASE)
         return next(
             (
-                {"_id": user.get("_id")}
+                {
+                    key: value
+                    for key, value in user.items()
+                    if projection.get(key, 0)
+                }
                 for user in self.items
-                if pattern.fullmatch(user.get("Email", ""))
-                and user.get("UserId") not in excluded_user_ids
+                if self.matches(query, user)
             ),
             None,
         )
 
     async def count_documents(self, query):
-        if "UserId" in query:
-            allowed_ids = query["UserId"].get("$in", [])
-            return sum(item.get("UserId") in allowed_ids for item in self.items)
-        if "SessionId" in query:
-            allowed_ids = query["SessionId"].get("$in", [])
-            return sum(item.get("SessionId") in allowed_ids for item in self.items)
-        return len(self.items)
+        return sum(self.matches(query, item) for item in self.items)
 
     async def find_one_and_update(
         self,
@@ -110,11 +99,7 @@ class FakeUserCollection:
     ):
         self.update_arguments = (query, update, return_document, projection)
         for user in self.items:
-            matches = query.get("UserId") == user.get("UserId") or any(
-                condition.get("UserId") == user.get("UserId")
-                for condition in query.get("$or", [])
-            )
-            if matches:
+            if self.matches(query, user):
                 user.update(update["$set"])
                 return {
                     key: value
@@ -122,6 +107,17 @@ class FakeUserCollection:
                     if projection.get(key, 0)
                 }
         return None
+
+    async def update_one(self, query, update):
+        self.update_arguments = (query, update)
+        if self.before_update:
+            self.before_update()
+        for user in self.items:
+            if self.matches(query, user):
+                previous = user.copy()
+                user.update(update["$set"])
+                return FakeUpdateResult(previous != user)
+        return FakeUpdateResult(False)
 
     async def insert_one(self, document):
         if await self.find_one(
@@ -155,6 +151,11 @@ class FakeUserCollection:
 class FakeDeleteResult:
     def __init__(self, deleted_count):
         self.deleted_count = deleted_count
+
+
+class FakeUpdateResult:
+    def __init__(self, modified):
+        self.modified_count = int(modified)
 
 
 class FakeDatabase:
@@ -222,6 +223,7 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
                     {"Email": {"$regex": "test", "$options": "i"}},
                 ],
                 "IsActive": True,
+                "IsDeleted": {"$ne": True},
             },
             collection.find_arguments[0],
         )
@@ -245,6 +247,7 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
         result = await repository.update_status("7", False)
 
         self.assertEqual({"IsActive": False}, collection.update_arguments[1]["$set"])
+        self.assertIn("IsDeleted", collection.update_arguments[0]["$and"][1])
         self.assertEqual(False, result["IsActive"])
         self.assertNotIn("PasswordHash", result)
 
@@ -444,7 +447,43 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
         result = await repository.delete_if_unrelated("user-1")
 
         self.assertTrue(result["deleted"])
-        self.assertEqual([], users.items)
+        self.assertEqual(1, len(users.items))
+        self.assertTrue(users.items[0]["IsDeleted"])
+        self.assertFalse(users.items[0]["IsActive"])
+        self.assertIn("DeletedAt", users.items[0])
+
+    async def test_concurrent_activity_write_keeps_user_reference_after_soft_delete(self):
+        users = FakeUserCollection([{"UserId": "user-1"}])
+        saved_places = FakeUserCollection([])
+        users.before_update = lambda: saved_places.items.append(
+            {"UserId": "user-1", "PlaceId": 10}
+        )
+        repository = UserAccountRepository(
+            FakeDatabase(users, saved_places=saved_places),
+            self.settings,
+        )
+
+        result = await repository.delete_if_unrelated("user-1")
+
+        self.assertTrue(result["deleted"])
+        self.assertTrue(users.items[0]["IsDeleted"])
+        self.assertEqual("user-1", saved_places.items[0]["UserId"])
+
+    async def test_deleted_users_are_hidden_from_list_and_cannot_be_deleted_again(self):
+        users = FakeUserCollection(
+            [
+                {"UserId": "user-1", "FullName": "Visible"},
+                {"UserId": "user-2", "FullName": "Deleted", "IsDeleted": True},
+            ]
+        )
+        repository = UserAccountRepository(FakeDatabase(users), self.settings)
+
+        items, total = await repository.list("", None, 0, 20)
+        second_delete = await repository.delete_if_unrelated("user-2")
+
+        self.assertEqual(["user-1"], [item["UserId"] for item in items])
+        self.assertEqual(1, total)
+        self.assertIsNone(second_delete)
 
     async def test_delete_user_is_blocked_by_saved_place(self):
         users = FakeUserCollection([{"UserId": "user-1"}])

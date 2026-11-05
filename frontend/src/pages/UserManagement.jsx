@@ -128,12 +128,13 @@ export default function UserManagement({
     }
   }
 
-  // Xác nhận xóa; backend từ chối nếu tài khoản còn lịch sử hoạt động liên quan.
+  // Xác nhận xóa mềm; hồ sơ và dữ liệu liên quan được giữ lại trong database.
   async function deleteUser(user) {
     const confirmed = window.confirm(
       `Xóa tài khoản "${user.FullName}"?\n\n` +
-      "Chỉ xóa được khi user không còn địa điểm đã lưu, lịch sử nghe, " +
-      "phiên truy cập hoặc sự kiện sử dụng. Thao tác này không thể hoàn tác.",
+      "Tài khoản sẽ bị vô hiệu hóa và ẩn khỏi danh sách. Hồ sơ cùng dữ liệu " +
+      "hoạt động vẫn được giữ trong database để tránh mất lịch sử. " +
+      "Không thể khôi phục từ giao diện.",
     );
     if (!confirmed) {
       return;
@@ -151,7 +152,7 @@ export default function UserManagement({
       );
       setActivity(null);
       setEditingUser(null);
-      setNotice("Đã xóa tài khoản người dùng.");
+      setNotice("Đã vô hiệu hóa và ẩn tài khoản; dữ liệu vẫn được giữ.");
       const nextSkip = users.length === 1 && skip > 0
         ? Math.max(0, skip - PAGE_SIZE)
         : skip;

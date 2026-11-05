@@ -13,6 +13,9 @@ allocated through the `Counters` collection. `Categories` uses `CategoryId`,
 `CategoryName`, and `Description`. Place slugs are generated from the name
 when omitted and must be unique. Deleting a place with related `PlaceImages`,
 or a category referenced by places, is rejected rather than cascading.
+Audio management uses the `PlaceAudios` collection and generates translated
+MP3 narration with `deep-translator` and `edge-tts`; files are stored under
+`backend/uploads/audio` by default.
 
 Backend management code follows routes → controllers → services → repositories.
 Route modules aggregate and register endpoint routers; controllers handle HTTP
@@ -23,8 +26,9 @@ use the same service/repository split. The shared integer-ID allocator is in
 
 ### Run locally
 
-Put Atlas settings in `backend/atlas-credentials.env` (this file is ignored by
-Git), or set them in the shell. For example:
+Put Atlas settings in `backend/atlas-credentials.env` (or the existing
+`backend/src/atlas_credential.env`; both files are ignored by Git), or set
+them in the shell. For example:
 
 ```powershell
 MONGODB_URI=mongodb+srv://<database-user>:<url-encoded-password>@<cluster-host>/?retryWrites=true&w=majority
@@ -57,6 +61,8 @@ before deploying beyond local development.
 The current Atlas database did not contain `Places` or `Categories` when this
 feature was added. Start the API, sign in, create one or more categories in the
 **Quản lý danh mục** section, then add places and choose a category.
+The **Hình ảnh** section automatically loads the image library for all places;
+choose a place by name only when uploading an image.
 
 `AdminAccounts` stores `AdminId`, `Username`, `Email`, `PasswordHash`, `Role`,
 `IsActive`, `CreatedAt`, `UpdatedAt`, and `LastLoginAt`. `AdminActivityLogs`
@@ -78,6 +84,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/admin/images` | List all images with their place names |
 | `GET` | `/api/admin/places/{place_id}/images` | List a place's images by `sort_order` |
 | `POST` | `/api/admin/places/{place_id}/images` | Upload multiple images as multipart field `files`; optional repeated `captions` and `sort_orders` fields |
 | `PATCH` | `/api/admin/images/{image_id}` | Update `caption`, `sort_order`, or both |
@@ -125,6 +132,7 @@ Run the backend unit tests from `backend` with
 `python -m unittest discover -s tests -v`.
 
 Set `MONGODB_PLACES_COLLECTION`, `MONGODB_PLACE_IMAGES_COLLECTION`,
+`MONGODB_AUDIO_COLLECTION`, `AUDIO_STORAGE_DIR`,
 `MONGODB_ADMIN_ACCOUNTS_COLLECTION`,
 `MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION`, `MONGODB_USER_ACCOUNTS_COLLECTION`,
 `MONGODB_SAVED_PLACES_COLLECTION`, `MONGODB_LISTENING_HISTORY_COLLECTION`,

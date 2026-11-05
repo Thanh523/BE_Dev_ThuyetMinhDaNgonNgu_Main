@@ -2,7 +2,10 @@ import { useState } from "react";
 import CategoryManagement from "./pages/CategoryManagement.jsx";
 import ImageManagement from "./pages/ImageManagement.jsx";
 import PlaceManagement from "./pages/PlaceManagement.jsx";
+
 import UserManagement from "./pages/UserManagement.jsx";
+
+import AudioManagement from "./pages/AudioManagement.jsx";
 
 const DEFAULT_API_URL = "http://localhost:8000";
 
@@ -13,7 +16,7 @@ function normalizedToken(token) {
 export default function App() {
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
   const [token, setToken] = useState("");
-  const [activePage, setActivePage] = useState("places");
+  const [activePage, setActivePage] = useState("placeimages");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,7 +64,7 @@ export default function App() {
       }
       setToken(result.access_token);
       setPassword("");
-      setActivePage("places");
+      setActivePage("placeimages");
       setNotice("Đăng nhập thành công. Phiên đăng nhập hết hạn sau 8 giờ.");
     } catch (loginError) {
       setError(loginError.message);
@@ -189,12 +192,20 @@ export default function App() {
             Danh mục
           </button>
           <button
+
             aria-pressed={activePage === "users"}
             className={activePage === "users" ? "active" : ""}
             onClick={() => setActivePage("users")}
             type="button"
           >
             Người dùng
+
+            aria-pressed={activePage === "audio"}
+            className={activePage === "audio" ? "active" : ""}
+            onClick={() => setActivePage("audio")}
+            type="button"
+          >
+            Audio
           </button>
         </nav>
       )}
@@ -223,8 +234,12 @@ export default function App() {
           token={normalizedAuthToken}
         />
       )}
+
       {token && activePage === "users" && (
         <UserManagement
+
+      {token && activePage === "audio" && (
+        <AudioManagement
           apiUrl={apiUrl}
           setError={setError}
           setNotice={setNotice}

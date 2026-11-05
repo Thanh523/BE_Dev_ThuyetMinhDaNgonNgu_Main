@@ -19,6 +19,7 @@ the `Places` collection is optional during login. The login endpoint returns an
 admin JWT valid for 8 hours. The token stays in page memory and is not saved to
 browser storage.
 
+
 After login, use the separate **Địa điểm**, **Hình ảnh**, **Danh mục**, and
 **Người dùng** pages. The user page searches accounts by name/email, filters
 by active status, pages through results, and lets an admin lock or unlock an
@@ -38,3 +39,4 @@ Leaving all sort orders blank lets the backend append uploaded images
 automatically. The backend CORS configuration must include the frontend's
 origin if it has been changed from its defaults. See the repository README for
 creating the first admin account and configuring the JWT signing key.
+

@@ -1,16 +1,35 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(BACKEND_ROOT / "atlas-credentials.env")
+load_dotenv(BACKEND_ROOT / "src" / "atlas_credential.env")
 
 
 def _read_csv(name: str, default: str) -> list[str]:
     return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
+
+def _read_mongodb_uri() -> str:
+    configured_uri = os.getenv("MONGODB_URI", "").strip()
+    if configured_uri.startswith(("mongodb://", "mongodb+srv://")):
+        return configured_uri
+
+    username = os.getenv("MONGODB_USERNAME", "").strip()
+    password = os.getenv("MONGODB_PASSWORD", "")
+    if configured_uri and "@" in configured_uri:
+        return f"mongodb+srv://{configured_uri}"
+    if username and password and configured_uri:
+        return (
+            f"mongodb+srv://{quote_plus(username)}:{quote_plus(password)}"
+            f"@{configured_uri}/?retryWrites=true&w=majority"
+        )
+    return "mongodb://localhost:27017"
 
 
 @dataclass(frozen=True)
@@ -26,7 +45,9 @@ class Settings:
     jwt_audience: str | None
     cors_origins: list[str]
     image_storage_dir: Path
+    audio_storage_dir: Path = Path("uploads/audio")
     categories_collection: str = "Categories"
+    audio_collection: str = "PlaceAudios"
     counters_collection: str = "Counters"
     admin_accounts_collection: str = "AdminAccounts"
     admin_activity_logs_collection: str = "AdminActivityLogs"
@@ -41,7 +62,7 @@ class Settings:
 
 def get_settings() -> Settings:
     return Settings(
-        mongodb_uri=os.getenv("MONGODB_URI", "mongodb://localhost:27017"),
+        mongodb_uri=_read_mongodb_uri(),
         mongodb_database=os.getenv("MONGODB_DATABASE", "SaigonEcho"),
         places_collection=os.getenv("MONGODB_PLACES_COLLECTION", "Places"),
         place_images_collection=os.getenv("MONGODB_PLACE_IMAGES_COLLECTION", "PlaceImages"),
@@ -60,7 +81,14 @@ def get_settings() -> Settings:
                 str(BACKEND_ROOT / "uploads" / "images"),
             )
         ).resolve(),
+        audio_storage_dir=Path(
+            os.getenv(
+                "AUDIO_STORAGE_DIR",
+                str(BACKEND_ROOT / "uploads" / "audio"),
+            )
+        ).resolve(),
         categories_collection=os.getenv("MONGODB_CATEGORIES_COLLECTION", "Categories"),
+        audio_collection=os.getenv("MONGODB_AUDIO_COLLECTION", "PlaceAudios"),
         counters_collection=os.getenv("MONGODB_COUNTERS_COLLECTION", "Counters"),
         admin_accounts_collection=os.getenv(
             "MONGODB_ADMIN_ACCOUNTS_COLLECTION",

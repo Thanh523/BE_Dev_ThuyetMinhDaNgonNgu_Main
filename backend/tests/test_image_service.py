@@ -18,6 +18,12 @@ class FakeRepository:
     async def place_exists(self, place_id):
         return self.exists
 
+    async def list_all_with_place_names(self):
+        return [
+            {**document, "PlaceName": "Test Place"}
+            for document in self.documents.values()
+        ]
+
     async def next_sort_order(self, place_id):
         orders = [
             document["SortOrder"]
@@ -105,6 +111,19 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(["First", "Second"], [image["Caption"] for image in images])
         self.assertTrue(all((self.storage / image["FileUrl"].split("/")[-1]).is_file() for image in images))
         self.assertEqual(2, len(self.repository.documents))
+
+    async def test_lists_images_for_all_places_with_place_names(self):
+        await self.service.upload(
+            place_id=17,
+            files=[UploadFile(filename="first.png", file=io.BytesIO(image_bytes("PNG")))],
+            captions=None,
+            sort_orders=None,
+        )
+
+        images = await self.service.list_all()
+
+        self.assertEqual(1, len(images))
+        self.assertEqual("Test Place", images[0]["PlaceName"])
 
     async def test_rejects_non_image_and_removes_temporary_file(self):
         upload = UploadFile(filename="fake.png", file=io.BytesIO(b"not an image"))

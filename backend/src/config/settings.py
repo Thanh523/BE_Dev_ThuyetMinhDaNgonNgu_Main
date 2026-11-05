@@ -51,6 +51,12 @@ class Settings:
     counters_collection: str = "Counters"
     admin_accounts_collection: str = "AdminAccounts"
     admin_activity_logs_collection: str = "AdminActivityLogs"
+    # Collection tài khoản người dùng theo ERD.
+    user_accounts_collection: str = "UserAccounts"
+    saved_places_collection: str = "SavedPlaces"
+    listening_history_collection: str = "ListeningHistory"
+    visitor_sessions_collection: str = "VisitorSessions"
+    usage_events_collection: str = "UsageEvents"
     max_image_size_bytes: int = 10 * 1024 * 1024
 
 
@@ -91,5 +97,26 @@ def get_settings() -> Settings:
         admin_activity_logs_collection=os.getenv(
             "MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION",
             "AdminActivityLogs",
+        ),
+        # Cho phép đổi tên collection UserAccounts qua biến môi trường.
+        user_accounts_collection=os.getenv(
+            "MONGODB_USER_ACCOUNTS_COLLECTION",
+            "UserAccounts",
+        ),
+        saved_places_collection=os.getenv(
+            "MONGODB_SAVED_PLACES_COLLECTION",
+            "SavedPlaces",
+        ),
+        listening_history_collection=os.getenv(
+            "MONGODB_LISTENING_HISTORY_COLLECTION",
+            "ListeningHistory",
+        ),
+        visitor_sessions_collection=os.getenv(
+            "MONGODB_VISITOR_SESSIONS_COLLECTION",
+            "VisitorSessions",
+        ),
+        usage_events_collection=os.getenv(
+            "MONGODB_USAGE_EVENTS_COLLECTION",
+            "UsageEvents",
         ),
     )

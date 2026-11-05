@@ -99,6 +99,29 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `POST` | `/api/admin/categories` | Create a category |
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
 | `DELETE` | `/api/admin/categories/{category_id}` | Delete an unused category |
+| `GET` | `/api/admin/users` | Search and page user accounts (never returns password hashes) |
+| `POST` | `/api/admin/users` | Temporarily create test users from admin |
+| `PATCH` | `/api/admin/users/{user_id}` | Update a user's name and email |
+| `PATCH` | `/api/admin/users/{user_id}/status` | Activate or deactivate a user account |
+| `DELETE` | `/api/admin/users/{user_id}` | Soft-delete a user when no related records exist |
+| `GET` | `/api/admin/users/{user_id}/activity` | View recent saved places, listening history, and visitor sessions |
+
+The user list accepts optional `search` (name/email), `is_active`, `skip`, and
+`limit` query parameters. User management endpoints require an admin token;
+create, profile, status, and delete operations are recorded in `AdminActivityLogs`.
+The admin create-user endpoint is temporary for testing management features
+and should be removed when self-service registration is implemented. Test
+passwords must be 12-128 characters and are stored only as an Argon2 hash.
+User deletion is rejected while records exist in `SavedPlaces`,
+`ListeningHistory`, or `VisitorSessions`, or while `UsageEvents` reference one
+of the user's visitor sessions. Deletion is soft: the account is marked with
+`IsDeleted` and `DeletedAt`, deactivated, and hidden from the user list; its
+record and related history remain in MongoDB. This retains the account
+reference if activity is written concurrently with deletion. Deleted users'
+email addresses remain reserved by the unique index. User email addresses are
+unique without case sensitivity. The activity endpoint accepts an optional
+`limit` (1-50, default 20) and reads from `SavedPlaces`, `ListeningHistory`,
+and `VisitorSessions`.
 
 Uploads accept valid JPEG, PNG, and WebP files up to 10 MB each. If captions or
 sort orders are provided during a batch upload, provide one value per file.
@@ -111,7 +134,10 @@ Run the backend unit tests from `backend` with
 Set `MONGODB_PLACES_COLLECTION`, `MONGODB_PLACE_IMAGES_COLLECTION`,
 `MONGODB_AUDIO_COLLECTION`, `AUDIO_STORAGE_DIR`,
 `MONGODB_ADMIN_ACCOUNTS_COLLECTION`,
-`MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION`, `MONGODB_CATEGORIES_COLLECTION`,
+`MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION`, `MONGODB_USER_ACCOUNTS_COLLECTION`,
+`MONGODB_SAVED_PLACES_COLLECTION`, `MONGODB_LISTENING_HISTORY_COLLECTION`,
+`MONGODB_VISITOR_SESSIONS_COLLECTION`, `MONGODB_USAGE_EVENTS_COLLECTION`,
+`MONGODB_CATEGORIES_COLLECTION`,
 `MONGODB_COUNTERS_COLLECTION`, `IMAGE_STORAGE_DIR`, and `CORS_ORIGINS` to
 override the defaults. The MongoDB database and collection names and file
 storage path are configurable for integration with the existing application.

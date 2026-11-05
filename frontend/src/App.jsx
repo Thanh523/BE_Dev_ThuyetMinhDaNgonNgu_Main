@@ -2,6 +2,9 @@ import { useState } from "react";
 import CategoryManagement from "./pages/CategoryManagement.jsx";
 import ImageManagement from "./pages/ImageManagement.jsx";
 import PlaceManagement from "./pages/PlaceManagement.jsx";
+
+import UserManagement from "./pages/UserManagement.jsx";
+
 import AudioManagement from "./pages/AudioManagement.jsx";
 
 const DEFAULT_API_URL = "http://localhost:8000";
@@ -189,6 +192,14 @@ export default function App() {
             Danh mục
           </button>
           <button
+
+            aria-pressed={activePage === "users"}
+            className={activePage === "users" ? "active" : ""}
+            onClick={() => setActivePage("users")}
+            type="button"
+          >
+            Người dùng
+
             aria-pressed={activePage === "audio"}
             className={activePage === "audio" ? "active" : ""}
             onClick={() => setActivePage("audio")}
@@ -223,6 +234,10 @@ export default function App() {
           token={normalizedAuthToken}
         />
       )}
+
+      {token && activePage === "users" && (
+        <UserManagement
+
       {token && activePage === "audio" && (
         <AudioManagement
           apiUrl={apiUrl}

@@ -3,6 +3,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
 from pymongo import ASCENDING, AsyncMongoClient
+from pymongo.collation import Collation
 
 from src.config.settings import get_settings
 
@@ -69,6 +70,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         await activity_logs.create_index(
             [("AdminId", ASCENDING), ("CreatedAt", ASCENDING)],
+        )
+        # Email của user phải duy nhất, không phân biệt chữ hoa/chữ thường.
+        await database[settings.user_accounts_collection].create_index(
+            [("Email", ASCENDING)],
+            unique=True,
+            collation=Collation(locale="en", strength=2),
+        )
+        await database[settings.user_accounts_collection].create_index(
+            [("UserId", ASCENDING)],
+            unique=True,
         )
         app.state.mongo_client = client
         app.state.database = database

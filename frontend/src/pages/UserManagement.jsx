@@ -128,6 +128,42 @@ export default function UserManagement({
     }
   }
 
+  // Xác nhận xóa; backend từ chối nếu tài khoản còn lịch sử hoạt động liên quan.
+  async function deleteUser(user) {
+    const confirmed = window.confirm(
+      `Xóa tài khoản "${user.FullName}"?\n\n` +
+      "Chỉ xóa được khi user không còn địa điểm đã lưu, lịch sử nghe, " +
+      "phiên truy cập hoặc sự kiện sử dụng. Thao tác này không thể hoàn tác.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await adminRequest(
+        apiUrl,
+        token,
+        `/api/admin/users/${encodeURIComponent(user.UserId)}`,
+        { method: "DELETE" },
+      );
+      setActivity(null);
+      setEditingUser(null);
+      setNotice("Đã xóa tài khoản người dùng.");
+      const nextSkip = users.length === 1 && skip > 0
+        ? Math.max(0, skip - PAGE_SIZE)
+        : skip;
+      setSkip(nextSkip);
+      await loadUsers(nextSkip, filters);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Nạp thông tin hiện tại của user vào form chỉnh sửa.
   function startEditing(user) {
     setEditingUser(user);
@@ -540,6 +576,14 @@ export default function UserManagement({
                     type="button"
                   >
                     {user.IsActive ? "Khóa" : "Mở khóa"}
+                  </button>
+                  <button
+                    className="text-button danger-text"
+                    disabled={busy}
+                    onClick={() => deleteUser(user)}
+                    type="button"
+                  >
+                    Xóa
                   </button>
                 </td>
               </tr>

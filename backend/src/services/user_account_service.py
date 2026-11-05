@@ -106,6 +106,31 @@ class UserAccountService:
             raise HTTPException(status_code=404, detail="User account was not found.")
         return activity
 
+    # Xóa user chỉ khi không còn bản ghi liên quan để tránh làm mất lịch sử.
+    async def delete_user(self, user_id: str) -> None:
+        try:
+            result = await self.repository.delete_if_unrelated(user_id)
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="User account could not be deleted.",
+            ) from error
+        if result is None:
+            raise HTTPException(status_code=404, detail="User account was not found.")
+        if not result["deleted"]:
+            related = ", ".join(
+                f"{name}: {count}"
+                for name, count in result["related_counts"].items()
+                if count
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "User account cannot be deleted while related activity "
+                    f"records exist ({related})."
+                ),
+            )
+
     # Tạo user tạm để admin có dữ liệu kiểm thử các chức năng quản lý.
     async def create_user(self, full_name: str, email: str, password: str) -> dict:
         normalized_name = full_name.strip()

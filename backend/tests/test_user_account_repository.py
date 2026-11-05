@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 from fastapi import HTTPException
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from src.config.settings import Settings
 from src.repositories.user_account_repository import UserAccountRepository
@@ -37,12 +37,35 @@ class FakeUserCollection:
 
     def find(self, query, projection):
         self.find_arguments = (query, projection)
-        return FakeCursor(self.items)
+        if "UserId" in query:
+            allowed_ids = query["UserId"].get("$in", [])
+            matched = [
+                item for item in self.items
+                if item.get("UserId") in allowed_ids
+            ]
+        elif "SessionId" in query:
+            allowed_ids = query["SessionId"].get("$in", [])
+            matched = [
+                item for item in self.items
+                if item.get("SessionId") in allowed_ids
+            ]
+        else:
+            matched = self.items
+        projected = [
+            {key: value for key, value in item.items() if projection.get(key, 0)}
+            for item in matched
+        ]
+        return FakeCursor(projected)
 
     async def find_one(self, query, projection):
         self.exists_arguments = (query, projection)
         email_condition = query.get("Email")
-        excluded_user_ids = query.get("UserId", {}).get("$nin", [])
+        user_id_condition = query.get("UserId", {})
+        excluded_user_ids = (
+            user_id_condition.get("$nin", [])
+            if isinstance(user_id_condition, dict)
+            else []
+        )
         if email_condition is None:
             user_id_query = query.get("UserId")
             alternatives = query.get("$or", [])
@@ -70,6 +93,12 @@ class FakeUserCollection:
         )
 
     async def count_documents(self, query):
+        if "UserId" in query:
+            allowed_ids = query["UserId"].get("$in", [])
+            return sum(item.get("UserId") in allowed_ids for item in self.items)
+        if "SessionId" in query:
+            allowed_ids = query["SessionId"].get("$in", [])
+            return sum(item.get("SessionId") in allowed_ids for item in self.items)
         return len(self.items)
 
     async def find_one_and_update(
@@ -107,6 +136,27 @@ class FakeUserCollection:
             raise DuplicateKeyError("duplicate email")
         self.items.append(document)
 
+    async def delete_one(self, query):
+        user_ids = []
+        if "UserId" in query:
+            user_ids.append(query["UserId"])
+        user_ids.extend(
+            condition["UserId"]
+            for condition in query.get("$or", [])
+            if "UserId" in condition
+        )
+        for index, user in enumerate(self.items):
+            if user.get("UserId") in user_ids:
+                del self.items[index]
+                return FakeDeleteResult(1)
+        return FakeDeleteResult(0)
+
+
+class FakeDeleteResult:
+    def __init__(self, deleted_count):
+        self.deleted_count = deleted_count
+
+
 class FakeDatabase:
     def __init__(
         self,
@@ -114,12 +164,14 @@ class FakeDatabase:
         saved_places=None,
         listening_history=None,
         visitor_sessions=None,
+        usage_events=None,
     ):
         self.collections = {
             "UserAccounts": collection,
             "SavedPlaces": saved_places or FakeUserCollection([]),
             "ListeningHistory": listening_history or FakeUserCollection([]),
             "VisitorSessions": visitor_sessions or FakeUserCollection([]),
+            "UsageEvents": usage_events or FakeUserCollection([]),
         }
         self.collection_name = None
         self.accessed_collection_names = []
@@ -382,6 +434,76 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(15, activity["listening_history"][0]["AudioId"])
         self.assertEqual(1, activity["visitor_sessions_total"])
         self.assertEqual("session-3", activity["visitor_sessions"][0]["SessionId"])
+
+    async def test_delete_user_when_no_related_activity_exists(self):
+        users = FakeUserCollection(
+            [{"UserId": "user-1", "FullName": "Test User"}]
+        )
+        repository = UserAccountRepository(FakeDatabase(users), self.settings)
+
+        result = await repository.delete_if_unrelated("user-1")
+
+        self.assertTrue(result["deleted"])
+        self.assertEqual([], users.items)
+
+    async def test_delete_user_is_blocked_by_saved_place(self):
+        users = FakeUserCollection([{"UserId": "user-1"}])
+        saved_places = FakeUserCollection(
+            [{"UserId": "user-1", "PlaceId": 10}]
+        )
+        repository = UserAccountRepository(
+            FakeDatabase(users, saved_places=saved_places),
+            self.settings,
+        )
+
+        result = await repository.delete_if_unrelated("user-1")
+
+        self.assertFalse(result["deleted"])
+        self.assertEqual(1, result["related_counts"]["saved_places"])
+        self.assertEqual(1, len(users.items))
+
+    async def test_delete_user_is_blocked_by_usage_event_for_visitor_session(self):
+        users = FakeUserCollection([{"UserId": "user-1"}])
+        visitor_sessions = FakeUserCollection(
+            [{"UserId": "user-1", "SessionId": "session-1"}]
+        )
+        usage_events = FakeUserCollection(
+            [{"SessionId": "session-1", "EventType": "play"}]
+        )
+        repository = UserAccountRepository(
+            FakeDatabase(
+                users,
+                visitor_sessions=visitor_sessions,
+                usage_events=usage_events,
+            ),
+            self.settings,
+        )
+
+        result = await repository.delete_if_unrelated("user-1")
+
+        self.assertFalse(result["deleted"])
+        self.assertEqual(1, result["related_counts"]["usage_events"])
+        self.assertEqual(1, len(users.items))
+
+    async def test_delete_service_returns_conflict_when_activity_exists(self):
+        repository = Mock()
+        repository.delete_if_unrelated = AsyncMock(
+            return_value={
+                "deleted": False,
+                "related_counts": {
+                    "saved_places": 1,
+                    "listening_history": 0,
+                    "visitor_sessions": 0,
+                    "usage_events": 0,
+                },
+            }
+        )
+        service = UserAccountService(repository)
+
+        with self.assertRaises(HTTPException) as raised:
+            await service.delete_user("user-1")
+
+        self.assertEqual(409, raised.exception.status_code)
 
     async def test_service_returns_unavailable_error_on_database_failure(self):
         repository = Mock()

@@ -13,6 +13,7 @@ class UserAccountRepository:
         self.saved_places = database[settings.saved_places_collection]
         self.listening_history = database[settings.listening_history_collection]
         self.visitor_sessions = database[settings.visitor_sessions_collection]
+        self.usage_events = database[settings.usage_events_collection]
 
     @staticmethod
     def _user_id_query(user_id: str) -> dict:
@@ -202,3 +203,50 @@ class UserAccountRepository:
             "visitor_sessions": visitor_sessions,
             "visitor_sessions_total": visitor_sessions_total,
         }
+
+    async def delete_if_unrelated(self, user_id: str) -> dict | None:
+        # Chỉ cho phép xóa user khi không còn dữ liệu hoạt động tham chiếu đến user.
+        user_query = self._user_id_query(user_id)
+        user = await self.users.find_one(user_query, {"_id": 0, "UserId": 1})
+        if user is None:
+            return None
+
+        user_ids: list[str | int] = [user_id]
+        if user_id.isdecimal() and str(int(user_id)) == user_id:
+            user_ids.append(int(user_id))
+        related_query = {"UserId": {"$in": user_ids}}
+        related_counts = {
+            "saved_places": await self.saved_places.count_documents(related_query),
+            "listening_history": await self.listening_history.count_documents(
+                related_query,
+            ),
+            "visitor_sessions": await self.visitor_sessions.count_documents(
+                related_query,
+            ),
+        }
+
+        # UsageEvents liên kết gián tiếp với user qua SessionId trong VisitorSessions.
+        session_ids = await self.visitor_sessions.find(
+            related_query,
+            {"_id": 0, "SessionId": 1},
+        ).to_list(length=None)
+        session_values = [
+            session["SessionId"]
+            for session in session_ids
+            if "SessionId" in session
+        ]
+        related_counts["usage_events"] = (
+            await self.usage_events.count_documents(
+                {"SessionId": {"$in": session_values}},
+            )
+            if session_values
+            else 0
+        )
+
+        if any(related_counts.values()):
+            return {"deleted": False, "related_counts": related_counts}
+
+        result = await self.users.delete_one(user_query)
+        if result.deleted_count != 1:
+            return None
+        return {"deleted": True, "related_counts": related_counts}

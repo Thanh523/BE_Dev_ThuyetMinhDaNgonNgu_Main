@@ -25,7 +25,9 @@ by active status, pages through results, and lets an admin lock or unlock an
 account, edit the user's name and email, and view saved places and listening
 history and visitor sessions when available. The admin page manages existing
 user accounts. It currently has a temporary admin-only test-user creation form;
-remove it after self-service user registration is implemented. The places page supports place
+remove it after self-service user registration is implemented. Admins can
+delete a user only if no related activity records remain. The places page
+supports place
 CRUD, detail view, search, filters, visibility toggling, and safe deletion
 checks. The categories page supports category CRUD. The images page can list a
 place's images, upload JPEG/PNG/WebP files (up to 10 MB each), update captions

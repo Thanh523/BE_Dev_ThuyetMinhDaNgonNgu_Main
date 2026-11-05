@@ -190,6 +190,35 @@ async def update_user_status(
     return user
 
 
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: str,
+    database=Depends(get_database),
+    admin_claims: dict = Depends(require_admin),
+) -> None:
+    # Xóa user khi không có dữ liệu liên quan rồi ghi lại thao tác admin.
+    await _service(database).delete_user(user_id)
+    settings = get_settings()
+    try:
+        await log_admin_activity(
+            database,
+            settings.admin_activity_logs_collection,
+            admin_id=admin_claims["AdminId"],
+            action="DELETE",
+            entity_name="UserAccounts",
+            entity_id=user_id,
+            description="Deleted user account without related activity records.",
+        )
+    except PyMongoError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The user account was deleted, but its activity log could not "
+                "be saved. Contact an administrator before retrying."
+            ),
+        ) from error
+
+
 @router.patch("/{user_id}", response_model=UserView)
 async def update_user_profile(
     user_id: str,

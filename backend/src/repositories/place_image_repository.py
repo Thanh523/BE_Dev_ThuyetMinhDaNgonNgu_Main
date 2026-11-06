@@ -18,6 +18,12 @@ class PlaceImageRepository:
     async def place_exists(self, place_id: int | str) -> bool:
         return await self.places.find_one({"PlaceId": place_id}, {"_id": 1}) is not None
 
+    async def get_place(self, place_id: int | str) -> dict | None:
+        return await self.places.find_one(
+            {"PlaceId": place_id},
+            {"_id": 0, "PlaceId": 1, "Slug": 1},
+        )
+
     async def list_for_place(self, place_id: int | str) -> list[dict]:
         cursor = self.images.find({"PlaceId": place_id}).sort(
             [("SortOrder", 1), ("CreatedAt", 1), ("ImageId", 1)]

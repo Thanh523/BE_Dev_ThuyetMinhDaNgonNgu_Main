@@ -1,5 +1,6 @@
 import unittest
 from copy import deepcopy
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -156,6 +157,8 @@ class PlaceSlugTests(unittest.TestCase):
 
 class PlaceManagementTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.image_storage_dir = Path(self.temporary_directory.name) / "images"
         self.database = FakeDatabase()
         self.settings = Settings(
             mongodb_uri="mongodb://localhost:27017",
@@ -168,13 +171,20 @@ class PlaceManagementTests(unittest.IsolatedAsyncioTestCase):
             jwt_issuer=None,
             jwt_audience=None,
             cors_origins=[],
-            image_storage_dir=Path("uploads"),
+            image_storage_dir=self.image_storage_dir,
         )
         self.category_repository = CategoryRepository(self.database, self.settings)
         self.place_repository = PlaceRepository(self.database, self.settings)
         self.categories = CategoryService(self.category_repository)
-        self.places = PlaceService(self.place_repository, self.category_repository)
+        self.places = PlaceService(
+            self.place_repository,
+            self.category_repository,
+            self.image_storage_dir,
+        )
         self.category = await self.categories.create_category("Landmark")
+
+    async def asyncTearDown(self):
+        self.temporary_directory.cleanup()
 
     async def test_creates_place_with_generated_id_slug_and_visibility(self):
         place = await self.places.create_place(
@@ -187,6 +197,12 @@ class PlaceManagementTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, place["PlaceId"])
         self.assertEqual("cho-ben-thanh", place["Slug"])
         self.assertIs(place["IsVisible"], True)
+        self.assertTrue(
+            (
+                self.image_storage_dir
+                / "1-cho-ben-thanh"
+            ).is_dir()
+        )
         self.assertEqual(
             {
                 "PlaceId",

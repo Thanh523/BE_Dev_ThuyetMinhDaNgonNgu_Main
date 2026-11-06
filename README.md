@@ -13,9 +13,13 @@ allocated through the `Counters` collection. `Categories` uses `CategoryId`,
 `CategoryName`, and `Description`. Place slugs are generated from the name
 when omitted and must be unique. Deleting a place with related `PlaceImages`,
 or a category referenced by places, is rejected rather than cascading.
-Audio management uses the `PlaceAudios` collection and generates translated
-MP3 narration with `deep-translator` and `edge-tts`; files are stored under
-`backend/uploads/audio` by default.
+Creating a place also creates an image folder under `backend/uploads/images`
+named `<PlaceId>-<slug>`; uploaded images for that place are stored there.
+Audio management uses the `PlaceAudios` collection, linked by `PlaceId` and
+`Language`. Uploaded audio files are validated with `mutagen` and limited to
+50 MB by default. Files are stored under
+`backend/uploads/audio/<PlaceId>-<slug>` by default. The admin audio page
+provides audio upload and management without a text-to-speech form.
 
 Backend management code follows routes → controllers → services → repositories.
 Route modules aggregate and register endpoint routers; controllers handle HTTP
@@ -105,6 +109,12 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `PATCH` | `/api/admin/users/{user_id}/status` | Activate or deactivate a user account |
 | `DELETE` | `/api/admin/users/{user_id}` | Soft-delete a user when no related records exist |
 | `GET` | `/api/admin/users/{user_id}/activity` | View recent saved places, listening history, and visitor sessions |
+| `GET` | `/api/admin/places/{place_id}/audios` | List a place's audio by language |
+| `POST` | `/api/admin/places/{place_id}/audios` | Translate text and generate an MP3 narration |
+| `POST` | `/api/admin/places/{place_id}/audios/upload` | Upload an audio file with multipart fields `file`, `language`, and optional title/voice |
+| `PUT` | `/api/admin/audios/{audio_id}/file` | Replace an audio file |
+| `PATCH` | `/api/admin/audios/{audio_id}` | Update title, language, voice name, or active status |
+| `DELETE` | `/api/admin/audios/{audio_id}` | Delete audio metadata and its stored file |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and
 `limit` query parameters. User management endpoints require an admin token;
@@ -127,6 +137,10 @@ Uploads accept valid JPEG, PNG, and WebP files up to 10 MB each. If captions or
 sort orders are provided during a batch upload, provide one value per file.
 When sort orders are omitted, new images are appended after the current highest
 order. Image URLs are served under `/uploads/images/`.
+Audio uploads accept MP3, WAV, OGG, M4A, and FLAC up to 50 MB by default.
+The backend validates the file contents and stores the detected duration.
+Adjust the limit with `MAX_AUDIO_SIZE_BYTES`; audio URLs are served under
+`/uploads/audio/`.
 
 Run the backend unit tests from `backend` with
 `python -m unittest discover -s tests -v`.

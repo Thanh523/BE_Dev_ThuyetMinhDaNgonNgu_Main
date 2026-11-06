@@ -192,14 +192,14 @@ export default function App() {
             Danh mục
           </button>
           <button
-
             aria-pressed={activePage === "users"}
             className={activePage === "users" ? "active" : ""}
             onClick={() => setActivePage("users")}
             type="button"
           >
             Người dùng
-
+          </button>
+          <button
             aria-pressed={activePage === "audio"}
             className={activePage === "audio" ? "active" : ""}
             onClick={() => setActivePage("audio")}
@@ -237,7 +237,12 @@ export default function App() {
 
       {token && activePage === "users" && (
         <UserManagement
-
+          apiUrl={apiUrl}
+          setError={setError}
+          setNotice={setNotice}
+          token={normalizedAuthToken}
+        />
+      )}
       {token && activePage === "audio" && (
         <AudioManagement
           apiUrl={apiUrl}

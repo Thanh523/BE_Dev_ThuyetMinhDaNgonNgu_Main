@@ -410,6 +410,96 @@ input::placeholder {
   margin: 0;
 }
 
+.audio-management-list {
+  display: grid;
+  gap: 12px;
+}
+
+.audio-management-list .management-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.audio-file-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.audio-file-picker input {
+  width: 100%;
+  padding: 9px;
+  border: 1px dashed #c9d4ca;
+  border-radius: 8px;
+  background: #fafbf8;
+}
+
+.audio-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.audio-active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-active-toggle input {
+  width: auto;
+}
+
+.audio-card-heading {
+  align-items: flex-start;
+}
+
+.audio-card-heading h3,
+.audio-card-heading p {
+  margin: 0;
+}
+
+.audio-card-heading p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.audio-management-list audio {
+  width: 100%;
+}
+
+.audio-text-details summary {
+  color: var(--green-dark);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.audio-text-details p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.audio-replace-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.audio-replace-button input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .empty-note {
   grid-column: 1 / -1;
   margin: 0;
@@ -930,6 +1020,10 @@ input::placeholder {
   .user-create-fields,
   .user-activity-grid,
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .audio-edit-form {
     grid-template-columns: 1fr;
   }
 

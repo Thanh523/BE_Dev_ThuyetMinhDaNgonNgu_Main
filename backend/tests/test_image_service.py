@@ -18,6 +18,11 @@ class FakeRepository:
     async def place_exists(self, place_id):
         return self.exists
 
+    async def get_place(self, place_id):
+        if not self.exists:
+            return None
+        return {"PlaceId": place_id, "Slug": "test-place"}
+
     async def list_all_with_place_names(self):
         return [
             {**document, "PlaceName": "Test Place"}
@@ -94,6 +99,9 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.temporary_directory.cleanup()
 
+    def stored_file(self, file_url):
+        return self.storage / file_url.removeprefix("/uploads/images/")
+
     async def test_uploads_multiple_verified_images_with_manual_order(self):
         files = [
             UploadFile(filename="first.jpg", file=io.BytesIO(image_bytes("JPEG"))),
@@ -109,7 +117,8 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([20, 10], [image["SortOrder"] for image in images])
         self.assertEqual(["First", "Second"], [image["Caption"] for image in images])
-        self.assertTrue(all((self.storage / image["FileUrl"].split("/")[-1]).is_file() for image in images))
+        self.assertTrue(all(self.stored_file(image["FileUrl"]).is_file() for image in images))
+        self.assertTrue((self.storage / "17-test-place").is_dir())
         self.assertEqual(2, len(self.repository.documents))
 
     async def test_lists_images_for_all_places_with_place_names(self):
@@ -132,7 +141,7 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
             await self.service.upload(17, [upload], None, None)
 
         self.assertEqual(415, raised.exception.status_code)
-        self.assertEqual([], list(self.storage.iterdir()))
+        self.assertEqual([], list((self.storage / "17-test-place").iterdir()))
         self.assertEqual({}, self.repository.documents)
 
     async def test_rejects_files_over_configured_limit(self):
@@ -161,7 +170,7 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(413, raised.exception.status_code)
-        self.assertEqual([], list(self.storage.iterdir()))
+        self.assertEqual([], list((self.storage / "17-test-place").iterdir()))
 
     async def test_updates_caption_and_sort_order_then_permanently_deletes(self):
         image = (
@@ -172,7 +181,7 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
                 None,
             )
         )[0]
-        stored_file = self.storage / image["FileUrl"].split("/")[-1]
+        stored_file = self.stored_file(image["FileUrl"])
 
         updated = await self.service.update(image["ImageId"], "Updated caption", 5)
         self.assertEqual("Updated caption", updated["Caption"])

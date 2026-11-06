@@ -1,5 +1,7 @@
+import asyncio
 import re
 import unicodedata
+from pathlib import Path
 
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -15,14 +17,26 @@ def slugify(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "-", ascii_value).strip("-").lower()
 
 
+def _image_folder_name(place_id: int | str, slug: str) -> str:
+    place_id_value = str(place_id)
+    if (
+        not place_id_value.isdecimal()
+        or re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) is None
+    ):
+        raise ValueError("Place ID or slug is invalid for image storage.")
+    return f"{place_id_value}-{slug}"
+
+
 class PlaceService:
     def __init__(
         self,
         repository: PlaceRepository,
         category_repository: CategoryRepository,
+        image_storage_dir: Path,
     ):
         self.repository = repository
         self.category_repository = category_repository
+        self.image_storage_dir = image_storage_dir
 
     async def list_places(
         self,
@@ -86,7 +100,7 @@ class PlaceService:
                 )
             if await self.repository.slug_exists(slug_value):
                 raise HTTPException(status_code=409, detail="Slug is already in use.")
-            return await self.repository.create(
+            place = await self.repository.create(
                 {
                     "CategoryId": category_id,
                     "PlaceName": name,
@@ -95,6 +109,32 @@ class PlaceService:
                     "IsVisible": True,
                 }
             )
+            image_directory = self.image_storage_dir / _image_folder_name(
+                place["PlaceId"],
+                slug_value,
+            )
+            try:
+                await asyncio.to_thread(
+                    image_directory.mkdir,
+                    parents=True,
+                    exist_ok=True,
+                )
+            except OSError as error:
+                try:
+                    await self.repository.delete(place["PlaceId"])
+                except PyMongoError as rollback_error:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=(
+                            "Place was saved, but its image folder could not be "
+                            "created and the place could not be rolled back."
+                        ),
+                    ) from rollback_error
+                raise HTTPException(
+                    status_code=503,
+                    detail="Place could not be saved because its image folder could not be created.",
+                ) from error
+            return place
         except DuplicateKeyError as error:
             raise HTTPException(
                 status_code=409,

@@ -12,6 +12,12 @@ class PlaceAudioRepository:
     async def place_exists(self, place_id: int | str) -> bool:
         return await self.places.find_one({"PlaceId": place_id}, {"_id": 1}) is not None
 
+    async def get_place(self, place_id: int | str) -> dict | None:
+        return await self.places.find_one(
+            {"PlaceId": place_id},
+            {"_id": 0, "PlaceId": 1, "PlaceName": 1, "Slug": 1},
+        )
+
     async def list_for_place(self, place_id: int | str) -> list[dict]:
         cursor = self.audios.find({"PlaceId": place_id}).sort(
             [("Language", 1), ("CreatedAt", 1)]
@@ -37,10 +43,14 @@ class PlaceAudioRepository:
         return await self.audios.find_one({"AudioId": audio_id})
 
     async def update(self, audio_id: str, changes: dict) -> dict | None:
-        changes["UpdatedAt"] = datetime.now(timezone.utc)
         return await self.audios.find_one_and_update(
             {"AudioId": audio_id},
-            {"$set": changes},
+            {
+                "$set": {
+                    **changes,
+                    "UpdatedAt": datetime.now(timezone.utc),
+                }
+            },
             return_document=ReturnDocument.AFTER,
         )
 

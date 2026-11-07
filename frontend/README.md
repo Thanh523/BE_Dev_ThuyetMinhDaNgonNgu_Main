@@ -23,13 +23,13 @@ browser storage.
 After login, use the separate **Địa điểm**, **Hình ảnh**, **Danh mục**, and
 **Người dùng** pages. The user page searches accounts by name/email, filters
 by active status, pages through results, and lets an admin lock or unlock an
-account, edit the user's name and email, and view saved places and listening
-history and visitor sessions when available. The admin page manages existing
-user accounts. It currently has a temporary admin-only test-user creation form;
-remove it after self-service user registration is implemented. Admins can
-soft-delete a user only if no related activity records remain. This disables
-the account and hides it from the list while retaining the account record and
-activity history in MongoDB. The places page
+account, edit the user's name and email, and view saved places, listening
+history, visitor sessions, and usage events when available. The admin page
+manages existing user accounts. User self-service registration and activity
+are exposed through backend APIs; this frontend remains the admin demo. Admins
+can soft-delete a user only if no related activity records remain. This
+disables the account and hides it from the list while retaining the account
+record and activity history in MongoDB. The places page
 supports place
 CRUD, detail view, search, filters, visibility toggling, and safe deletion
 checks. The categories page supports category CRUD. The images page can list a
@@ -39,4 +39,3 @@ Leaving all sort orders blank lets the backend append uploaded images
 automatically. The backend CORS configuration must include the frontend's
 origin if it has been changed from its defaults. See the repository README for
 creating the first admin account and configuring the JWT signing key.
-

@@ -44,12 +44,6 @@ class UserStatusUpdate(BaseModel):
     is_active: bool
 
 
-class UserCreate(BaseModel):
-    full_name: str = Field(min_length=1, max_length=200)
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=12, max_length=128)
-
-
 class UserProfileUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
     email: str | None = Field(default=None, min_length=3, max_length=254)
@@ -83,8 +77,18 @@ class ListeningHistoryActivity(BaseModel):
 class VisitorSessionActivity(BaseModel):
     session_id: int | str = Field(alias="SessionId")
     started_at: datetime | None = Field(default=None, alias="StartedAt")
-    last_reported_at: datetime | None = Field(default=None, alias="LastReportedAt")
+    last_seen_at: datetime | None = Field(default=None, alias="LastSeenAt")
     ended_at: datetime | None = Field(default=None, alias="EndedAt")
+
+
+class UsageEventActivity(BaseModel):
+    event_id: int | str | None = Field(default=None, alias="EventId")
+    client_event_id: str | None = Field(default=None, alias="ClientEventId")
+    session_id: int | str = Field(alias="SessionId")
+    narration_id: int | str | None = Field(default=None, alias="NarrationId")
+    audio_id: int | str | None = Field(default=None, alias="AudioId")
+    event_type: str = Field(alias="EventType")
+    created_at: datetime | None = Field(default=None, alias="CreatedAt")
 
 
 class UserActivityView(BaseModel):
@@ -95,6 +99,8 @@ class UserActivityView(BaseModel):
     listening_history_total: int
     visitor_sessions: list[VisitorSessionActivity]
     visitor_sessions_total: int
+    usage_events: list[UsageEventActivity]
+    usage_events_total: int
 
 
 def _service(database) -> UserAccountService:
@@ -121,40 +127,6 @@ async def list_users(
         limit,
     )
     return {"items": items, "total": total, "skip": skip, "limit": limit}
-
-
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=UserView)
-async def create_user(
-    request: UserCreate,
-    database=Depends(get_database),
-    admin_claims: dict = Depends(require_admin),
-) -> dict:
-    # API tạm thời để admin tạo user kiểm thử; mật khẩu chỉ được lưu dưới dạng hash.
-    user = await _service(database).create_user(
-        request.full_name,
-        request.email,
-        request.password,
-    )
-    settings = get_settings()
-    try:
-        await log_admin_activity(
-            database,
-            settings.admin_activity_logs_collection,
-            admin_id=admin_claims["AdminId"],
-            action="CREATE",
-            entity_name="UserAccounts",
-            entity_id=str(user["UserId"]),
-            description="Created temporary test user account.",
-        )
-    except PyMongoError as error:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "The user account was created, but its activity log could not "
-                "be saved. Contact an administrator before retrying."
-            ),
-        ) from error
-    return user
 
 
 @router.patch("/{user_id}/status", response_model=UserView)

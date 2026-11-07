@@ -708,12 +708,6 @@ input::placeholder {
   margin-bottom: 18px;
 }
 
-.user-create-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin: -8px 0 16px;
-}
-
 .user-profile-form {
   display: grid;
   gap: 14px;
@@ -732,14 +726,6 @@ input::placeholder {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-}
-
-.user-create-fields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.user-create-fields label:last-child {
-  grid-column: 1 / -1;
 }
 
 .user-profile-actions {
@@ -1017,7 +1003,6 @@ input::placeholder {
   .place-filters,
   .user-filters,
   .user-profile-fields,
-  .user-create-fields,
   .user-activity-grid,
   .detail-grid {
     grid-template-columns: 1fr;

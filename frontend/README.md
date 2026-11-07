@@ -13,6 +13,8 @@ npm run dev
 
 Open the Vite URL (normally `http://localhost:5173`). Start the backend from
 `backend` with `python -m uvicorn src.main:app --reload`.
+The backend allows both `localhost:5173` and `127.0.0.1:5173` by default; restart
+the backend after changing `CORS_ORIGINS`.
 
 The **Demo người dùng** tab works without an admin login. Enter the backend
 URL, register a user, then sign in to try saved places, listening history,

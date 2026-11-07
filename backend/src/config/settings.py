@@ -76,7 +76,7 @@ def get_settings() -> Settings:
         jwt_audience=os.getenv("JWT_AUDIENCE"),
         cors_origins=_read_csv(
             "CORS_ORIGINS",
-            "http://localhost:3000,http://localhost:5173",
+            "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
         ),
         image_storage_dir=Path(
             os.getenv(

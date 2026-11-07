@@ -11,10 +11,20 @@ async function userRequest(apiUrl, token, path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${apiUrl.replace(/\/+$/, "")}${path}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${apiUrl.replace(/\/+$/, "")}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (requestError) {
+    if (requestError instanceof TypeError) {
+      throw new Error(
+        `Không kết nối được backend tại ${apiUrl}. Kiểm tra backend đang chạy và CORS cho địa chỉ trang demo.`,
+      );
+    }
+    throw requestError;
+  }
   if (response.status === 204) {
     return null;
   }

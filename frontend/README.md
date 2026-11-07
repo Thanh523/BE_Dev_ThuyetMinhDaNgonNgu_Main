@@ -14,7 +14,14 @@ npm run dev
 Open the Vite URL (normally `http://localhost:5173`). Start the backend from
 `backend` with `python -m uvicorn src.main:app --reload`.
 
-Enter the backend URL and admin username/password. A `PlaceId` that exists in
+The **Demo người dùng** tab works without an admin login. Enter the backend
+URL, register a user, then sign in to try saved places, listening history,
+visitor sessions, and usage events. The user token stays in page memory and is
+not stored in browser storage. Use IDs that already exist in MongoDB for
+`PlaceId`, `AudioId`, and optional `NarrationId`; the backend rejects missing or
+inactive content references.
+
+For admin management, enter the backend URL and admin username/password. A `PlaceId` that exists in
 the `Places` collection is optional during login. The login endpoint returns an
 admin JWT valid for 8 hours. The token stays in page memory and is not saved to
 browser storage.
@@ -25,9 +32,8 @@ After login, use the separate **Địa điểm**, **Hình ảnh**, **Danh mục*
 by active status, pages through results, and lets an admin lock or unlock an
 account, edit the user's name and email, and view saved places, listening
 history, visitor sessions, and usage events when available. The admin page
-manages existing user accounts. User self-service registration and activity
-are exposed through backend APIs; this frontend remains the admin demo. Admins
-can soft-delete a user only if no related activity records remain. This
+manages existing user accounts. Admins can soft-delete a user only if no
+related activity records remain. This
 disables the account and hides it from the list while retaining the account
 record and activity history in MongoDB. The places page
 supports place

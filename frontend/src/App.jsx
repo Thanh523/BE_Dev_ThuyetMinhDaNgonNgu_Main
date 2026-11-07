@@ -6,6 +6,7 @@ import PlaceManagement from "./pages/PlaceManagement.jsx";
 import UserManagement from "./pages/UserManagement.jsx";
 
 import AudioManagement from "./pages/AudioManagement.jsx";
+import UserDemo from "./pages/UserDemo.jsx";
 
 const DEFAULT_API_URL = "http://localhost:8000";
 
@@ -16,7 +17,7 @@ function normalizedToken(token) {
 export default function App() {
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
   const [token, setToken] = useState("");
-  const [activePage, setActivePage] = useState("placeimages");
+  const [activePage, setActivePage] = useState("userdemo");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -87,9 +88,9 @@ export default function App() {
         <div className="brand-mark" aria-hidden="true">SE</div>
         <div>
           <p className="eyebrow">SAIGON ECHO · DEMO</p>
-          <h1>Saigon Echo Admin</h1>
+          <h1>Saigon Echo API Demo</h1>
           <p className="subtitle">
-            Quản lý địa điểm, hình ảnh và danh mục trên các trang riêng.
+            Dùng demo người dùng để thử đăng ký, đăng nhập và các API hoạt động.
           </p>
         </div>
       </header>
@@ -165,51 +166,64 @@ export default function App() {
         </div>
       )}
 
-      {token && (
-        <nav className="admin-tabs" aria-label="Quản lý">
-          <button
-            aria-pressed={activePage === "places"}
-            className={activePage === "places" ? "active" : ""}
-            onClick={() => setActivePage("places")}
-            type="button"
-          >
-            Địa điểm
-          </button>
-          <button
-            aria-pressed={activePage === "placeimages"}
-            className={activePage === "placeimages" ? "active" : ""}
-            onClick={() => setActivePage("placeimages")}
-            type="button"
-          >
-            Hình ảnh
-          </button>
-          <button
-            aria-pressed={activePage === "categories"}
-            className={activePage === "categories" ? "active" : ""}
-            onClick={() => setActivePage("categories")}
-            type="button"
-          >
-            Danh mục
-          </button>
-          <button
-            aria-pressed={activePage === "users"}
-            className={activePage === "users" ? "active" : ""}
-            onClick={() => setActivePage("users")}
-            type="button"
-          >
-            Người dùng
-          </button>
-          <button
-            aria-pressed={activePage === "audio"}
-            className={activePage === "audio" ? "active" : ""}
-            onClick={() => setActivePage("audio")}
-            type="button"
-          >
-            Audio
-          </button>
-        </nav>
-      )}
+      <nav className="admin-tabs" aria-label="Demo và quản lý">
+        <button
+          aria-pressed={activePage === "userdemo"}
+          className={activePage === "userdemo" ? "active" : ""}
+          onClick={() => setActivePage("userdemo")}
+          type="button"
+        >
+          Demo người dùng
+        </button>
+        {token && (
+          <>
+            <button
+              aria-pressed={activePage === "places"}
+              className={activePage === "places" ? "active" : ""}
+              onClick={() => setActivePage("places")}
+              type="button"
+            >
+              Địa điểm
+            </button>
+            <button
+              aria-pressed={activePage === "placeimages"}
+              className={activePage === "placeimages" ? "active" : ""}
+              onClick={() => setActivePage("placeimages")}
+              type="button"
+            >
+              Hình ảnh
+            </button>
+            <button
+              aria-pressed={activePage === "categories"}
+              className={activePage === "categories" ? "active" : ""}
+              onClick={() => setActivePage("categories")}
+              type="button"
+            >
+              Danh mục
+            </button>
+            <button
+              aria-pressed={activePage === "users"}
+              className={activePage === "users" ? "active" : ""}
+              onClick={() => setActivePage("users")}
+              type="button"
+            >
+              Người dùng
+            </button>
+            <button
+              aria-pressed={activePage === "audio"}
+              className={activePage === "audio" ? "active" : ""}
+              onClick={() => setActivePage("audio")}
+              type="button"
+            >
+              Audio
+            </button>
+          </>
+        )}
+      </nav>
 
+      <div hidden={activePage !== "userdemo"}>
+        <UserDemo apiUrl={apiUrl} />
+      </div>
       {token && activePage === "places" && (
         <PlaceManagement
           apiUrl={apiUrl}
@@ -251,7 +265,7 @@ export default function App() {
           token={normalizedAuthToken}
         />
       )}
-      <footer className="page-footer">Saigon Echo · Admin demo</footer>
+      <footer className="page-footer">Saigon Echo · Admin &amp; User API demo</footer>
     </main>
   );
 }

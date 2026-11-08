@@ -127,6 +127,51 @@ class UserAuthServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(503, raised.exception.status_code)
 
+    async def test_change_password_verifies_current_password_and_stores_new_hash(self):
+        current_hash = password_hasher.hash("current-password")
+        repository = Mock()
+        repository.get_password_hash = AsyncMock(return_value=current_hash)
+        repository.update_password_hash = AsyncMock(return_value=True)
+        service = UserAuthService(repository, settings())
+
+        await service.change_password(
+            "user-1",
+            "current-password",
+            "a-new-long-password",
+        )
+
+        args = repository.update_password_hash.await_args.args
+        self.assertEqual(("user-1", current_hash), args[:2])
+        self.assertTrue(password_hasher.verify(args[2], "a-new-long-password"))
+
+    async def test_change_password_rejects_wrong_current_password(self):
+        repository = Mock()
+        repository.get_password_hash = AsyncMock(
+            return_value=password_hasher.hash("correct-password"),
+        )
+        repository.update_password_hash = AsyncMock()
+        service = UserAuthService(repository, settings())
+
+        with self.assertRaises(HTTPException) as raised:
+            await service.change_password(
+                "user-1",
+                "incorrect-password",
+                "a-new-long-password",
+            )
+
+        self.assertEqual(400, raised.exception.status_code)
+        repository.update_password_hash.assert_not_awaited()
+
+    async def test_change_password_rejects_short_new_password(self):
+        repository = Mock()
+        service = UserAuthService(repository, settings())
+
+        with self.assertRaises(HTTPException) as raised:
+            await service.change_password("user-1", "current-password", "short")
+
+        self.assertEqual(422, raised.exception.status_code)
+        repository.get_password_hash.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

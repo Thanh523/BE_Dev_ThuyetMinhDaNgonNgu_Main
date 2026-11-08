@@ -70,6 +70,14 @@ export default function UserDemo({ apiUrl }) {
   });
   const [token, setToken] = useState("");
   const [profile, setProfile] = useState(null);
+  const [profileForm, setProfileForm] = useState({ full_name: "" });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
   const [places, setPlaces] = useState([]);
   const [placeSearch, setPlaceSearch] = useState("");
   const [submittedPlaceSearch, setSubmittedPlaceSearch] = useState("");
@@ -101,6 +109,7 @@ export default function UserDemo({ apiUrl }) {
       ),
     ]);
     setProfile(currentProfile);
+    setProfileForm({ full_name: currentProfile.FullName });
     setSavedPlaces(saved.items);
     setListeningHistory(history.items);
   }, [apiUrl]);
@@ -181,6 +190,14 @@ export default function UserDemo({ apiUrl }) {
   function logout() {
     setToken("");
     setProfile(null);
+    setProfileForm({ full_name: "" });
+    setEditingProfile(false);
+    setChangingPassword(false);
+    setPasswordForm({
+      current_password: "",
+      new_password: "",
+      confirm_password: "",
+    });
     setSavedPlaces([]);
     setListeningHistory([]);
     setPlaces([]);
@@ -224,6 +241,49 @@ export default function UserDemo({ apiUrl }) {
       ),
       isSaved ? "Đã bỏ lưu địa điểm." : "Đã lưu địa điểm.",
       () => refreshActivity(token),
+    );
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    await runAction(
+      () => userRequest(apiUrl, token, "/api/user/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({ full_name: profileForm.full_name }),
+      }),
+      "Đã cập nhật hồ sơ.",
+      async () => {
+        setEditingProfile(false);
+        await refreshActivity(token);
+      },
+    );
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setError("Mật khẩu mới nhập lại không khớp.");
+      setNotice("");
+      return;
+    }
+
+    await runAction(
+      () => userRequest(apiUrl, token, "/api/user/auth/me/password", {
+        method: "PATCH",
+        body: JSON.stringify({
+          current_password: passwordForm.current_password,
+          new_password: passwordForm.new_password,
+        }),
+      }),
+      "Đã đổi mật khẩu thành công.",
+      () => {
+        setPasswordForm({
+          current_password: "",
+          new_password: "",
+          confirm_password: "",
+        });
+        setChangingPassword(false);
+      },
     );
   }
 
@@ -421,21 +481,190 @@ export default function UserDemo({ apiUrl }) {
           <section className="panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">USER SESSION</p>
-                <h2>Xin chào, {profile?.FullName ?? "người dùng"}</h2>
-                <p className="subtitle">{profile?.Email}</p>
+                <p className="eyebrow">TÀI KHOẢN CỦA TÔI</p>
+                <h2>{editingProfile ? "Chỉnh sửa hồ sơ" : "Hồ sơ người dùng"}</h2>
               </div>
               <div className="user-demo-actions">
                 <span className="status-pill status-connected">Đã đăng nhập</span>
+                {!editingProfile && (
+                  <button
+                    className="button button-outline"
+                    onClick={() => {
+                      setProfileForm({ full_name: profile?.FullName ?? "" });
+                      setEditingProfile(true);
+                      setError("");
+                      setNotice("");
+                    }}
+                    type="button"
+                  >
+                    Sửa hồ sơ
+                  </button>
+                )}
                 <button className="button button-outline" onClick={logout} type="button">
                   Đăng xuất
                 </button>
               </div>
             </div>
-            <p className="hint">
-              UserId: {profile?.UserId} · Đăng nhập gần nhất:{" "}
-              {formatDate(profile?.LastLoginAt)}
-            </p>
+            {editingProfile ? (
+              <form className="user-demo-profile-form" onSubmit={saveProfile}>
+                <div className="user-profile-fields">
+                  <label>
+                    Họ tên
+                    <input
+                      autoComplete="name"
+                      maxLength={200}
+                      minLength={1}
+                      onChange={(event) => setProfileForm((current) => ({
+                        ...current,
+                        full_name: event.target.value,
+                      }))}
+                      required
+                      value={profileForm.full_name}
+                    />
+                  </label>
+                  <label>
+                    Email
+                    <input
+                      readOnly
+                      value={profile?.Email ?? ""}
+                    />
+                  </label>
+                </div>
+                <p className="hint">
+                  Email chưa thể thay đổi vì tài khoản hiện chưa có bước xác minh email.
+                </p>
+                <div className="user-profile-actions">
+                  <button className="button" disabled={busy} type="submit">
+                    {busy ? "Đang lưu..." : "Lưu thay đổi"}
+                  </button>
+                  <button
+                    className="button button-outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setProfileForm({ full_name: profile?.FullName ?? "" });
+                      setEditingProfile(false);
+                      setError("");
+                    }}
+                    type="button"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <dl className="user-profile-details">
+                <div>
+                  <dt>Họ tên</dt>
+                  <dd>{profile?.FullName ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>Email</dt>
+                  <dd>{profile?.Email ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>Ngày tạo tài khoản</dt>
+                  <dd>{formatDate(profile?.CreatedAt)}</dd>
+                </div>
+                <div>
+                  <dt>Đăng nhập gần nhất</dt>
+                  <dd>{formatDate(profile?.LastLoginAt)}</dd>
+                </div>
+              </dl>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">BẢO MẬT TÀI KHOẢN</p>
+                <h2>Đổi mật khẩu</h2>
+              </div>
+              {!changingPassword && (
+                <button
+                  className="button button-outline"
+                  onClick={() => {
+                    setChangingPassword(true);
+                    setError("");
+                    setNotice("");
+                  }}
+                  type="button"
+                >
+                  Đổi mật khẩu
+                </button>
+              )}
+            </div>
+            {changingPassword && (
+              <form className="user-demo-profile-form" onSubmit={changePassword}>
+                <div className="user-password-fields">
+                  <label>
+                    Mật khẩu hiện tại
+                    <input
+                      autoComplete="current-password"
+                      maxLength={128}
+                      onChange={(event) => setPasswordForm((current) => ({
+                        ...current,
+                        current_password: event.target.value,
+                      }))}
+                      required
+                      type="password"
+                      value={passwordForm.current_password}
+                    />
+                  </label>
+                  <label>
+                    Mật khẩu mới
+                    <input
+                      autoComplete="new-password"
+                      maxLength={128}
+                      minLength={12}
+                      onChange={(event) => setPasswordForm((current) => ({
+                        ...current,
+                        new_password: event.target.value,
+                      }))}
+                      required
+                      type="password"
+                      value={passwordForm.new_password}
+                    />
+                  </label>
+                  <label>
+                    Nhập lại mật khẩu mới
+                    <input
+                      autoComplete="new-password"
+                      maxLength={128}
+                      minLength={12}
+                      onChange={(event) => setPasswordForm((current) => ({
+                        ...current,
+                        confirm_password: event.target.value,
+                      }))}
+                      required
+                      type="password"
+                      value={passwordForm.confirm_password}
+                    />
+                  </label>
+                </div>
+                <p className="hint">Mật khẩu mới cần có ít nhất 12 ký tự.</p>
+                <div className="user-profile-actions">
+                  <button className="button" disabled={busy} type="submit">
+                    {busy ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
+                  </button>
+                  <button
+                    className="button button-outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setChangingPassword(false);
+                      setPasswordForm({
+                        current_password: "",
+                        new_password: "",
+                        confirm_password: "",
+                      });
+                      setError("");
+                    }}
+                    type="button"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
 
           <section className="panel">

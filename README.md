@@ -112,6 +112,8 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `POST` | `/api/user/auth/register` | Register a user account (email is not verified by email) |
 | `POST` | `/api/user/auth/login` | Sign in with email/password and receive a user JWT |
 | `GET` | `/api/user/auth/me` | Get the authenticated user's profile |
+| `PATCH` | `/api/user/auth/me` | Update the authenticated user's full name |
+| `PATCH` | `/api/user/auth/me/password` | Change the authenticated user's password after verifying the current password |
 | `GET` | `/api/user/places` | Search and page through visible places |
 | `GET` | `/api/user/places/{place_id}/audios` | List active audio for a visible place |
 | `GET` | `/api/user/saved-places` | Page through the authenticated user's saved places |

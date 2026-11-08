@@ -157,6 +157,63 @@ class UserAuthService:
             "user": self._public_user(public_user),
         }
 
+    async def change_password(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        if len(new_password) < 12:
+            raise HTTPException(
+                status_code=422,
+                detail="Password must contain at least 12 characters.",
+            )
+        if len(new_password) > 128:
+            raise HTTPException(
+                status_code=422,
+                detail="Password must be no longer than 128 characters.",
+            )
+        if current_password == new_password:
+            raise HTTPException(
+                status_code=422,
+                detail="New password must be different from the current password.",
+            )
+
+        try:
+            current_hash = await self.repository.get_password_hash(user_id)
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Password could not be verified.",
+            ) from error
+        if current_hash is None:
+            raise HTTPException(status_code=404, detail="User account was not found.")
+
+        try:
+            password_hasher.verify(current_hash, current_password)
+        except (VerifyMismatchError, VerificationError, InvalidHashError) as error:
+            raise HTTPException(
+                status_code=400,
+                detail="Current password is incorrect.",
+            ) from error
+
+        try:
+            changed = await self.repository.update_password_hash(
+                user_id,
+                current_hash,
+                password_hasher.hash(new_password),
+            )
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Password could not be updated.",
+            ) from error
+        if not changed:
+            raise HTTPException(
+                status_code=409,
+                detail="Password changed concurrently; try again.",
+            )
+
     def _validate_jwt_configuration(self) -> None:
         if not self.settings.jwt_key:
             raise HTTPException(

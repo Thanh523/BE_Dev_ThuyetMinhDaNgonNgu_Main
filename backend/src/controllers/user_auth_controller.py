@@ -9,6 +9,8 @@ from src.config.database import get_database
 from src.config.settings import get_settings
 from src.middlewares.user_auth import require_user
 from src.repositories.user_auth_repository import UserAuthRepository
+from src.repositories.user_account_repository import UserAccountRepository
+from src.services.user_account_service import UserAccountService
 from src.services.user_auth_service import UserAuthService
 
 
@@ -41,6 +43,15 @@ class UserLogin(BaseModel):
         return value
 
 
+class UserProfileUpdate(BaseModel):
+    full_name: str = Field(min_length=1, max_length=200)
+
+
+class UserPasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class UserView(BaseModel):
     # Danh sách cho phép này đảm bảo PasswordHash không xuất hiện trong response.
     model_config = ConfigDict(populate_by_name=True)
@@ -59,6 +70,12 @@ def _service(database) -> UserAuthService:
     return UserAuthService(
         UserAuthRepository(database, settings.user_accounts_collection),
         settings,
+    )
+
+
+def _account_service(database) -> UserAccountService:
+    return UserAccountService(
+        UserAccountRepository(database, get_settings()),
     )
 
 
@@ -98,3 +115,31 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=404, detail="User account was not found.")
     return user
+
+
+@router.patch("/me", response_model=UserView)
+async def update_current_user(
+    request: UserProfileUpdate,
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> dict:
+    # Lấy UserId từ token để user chỉ có thể chỉnh sửa hồ sơ của chính mình.
+    return await _account_service(database).update_profile(
+        claims["UserId"],
+        request.full_name,
+        None,
+    )
+
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_current_user_password(
+    request: UserPasswordChange,
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> None:
+    # Yêu cầu mật khẩu hiện tại để chỉ chủ tài khoản đã xác thực mới đổi được mật khẩu.
+    await _service(database).change_password(
+        claims["UserId"],
+        request.current_password,
+        request.new_password,
+    )

@@ -69,3 +69,33 @@ class UserAuthRepository:
                 "LastLoginAt": 1,
             },
         )
+
+    async def get_password_hash(self, user_id: str) -> str | None:
+        user = await self.users.find_one(
+            {"$and": [
+                self._user_id_query(user_id),
+                {"IsActive": True, "IsDeleted": {"$ne": True}},
+            ]},
+            {"_id": 0, "PasswordHash": 1},
+        )
+        password_hash = user.get("PasswordHash") if user else None
+        return password_hash if isinstance(password_hash, str) else None
+
+    async def update_password_hash(
+        self,
+        user_id: str,
+        current_hash: str,
+        new_hash: str,
+    ) -> bool:
+        result = await self.users.update_one(
+            {"$and": [
+                self._user_id_query(user_id),
+                {
+                    "PasswordHash": current_hash,
+                    "IsActive": True,
+                    "IsDeleted": {"$ne": True},
+                },
+            ]},
+            {"$set": {"PasswordHash": new_hash}},
+        )
+        return result.modified_count == 1

@@ -40,6 +40,14 @@ class UserActivityService:
         except PyMongoError as error:
             raise self._unavailable("Place audio is temporarily unavailable.") from error
 
+    async def list_visible_categories(self) -> list[dict]:
+        try:
+            return await self.repository.list_visible_categories()
+        except PyMongoError as error:
+            raise self._unavailable(
+                "Place categories are temporarily unavailable.",
+            ) from error
+
     async def get_place_details(self, place_id: int) -> dict:
         try:
             # Kiểm tra visibility trước, tránh lộ ảnh/audio của địa điểm ẩn cho user.

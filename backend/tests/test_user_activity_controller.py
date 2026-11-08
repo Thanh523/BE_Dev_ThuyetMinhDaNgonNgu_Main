@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from src.controllers.user_activity_controller import (
     get_user_place_details,
+    list_user_categories,
     list_user_places,
 )
 
@@ -19,6 +20,7 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
 
         result = await list_user_places(
             search="museum",
+            category_id=3,
             skip=12,
             limit=12,
             database=object(),
@@ -27,7 +29,7 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
 
         place_service.list_places.assert_awaited_once_with(
             "museum",
-            None,
+            3,
             "visible",
             12,
             12,
@@ -36,6 +38,24 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             {"items": [{"PlaceId": 1}], "total": 1, "skip": 12, "limit": 12},
             result,
         )
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_user_category_listing_returns_visible_categories(
+        self,
+        service_factory,
+    ):
+        service = Mock()
+        categories = [{"CategoryId": 3, "CategoryName": "Museum"}]
+        service.list_visible_categories = AsyncMock(return_value=categories)
+        service_factory.return_value = service
+
+        result = await list_user_categories(
+            database=object(),
+            claims={"UserId": "user-1"},
+        )
+
+        service.list_visible_categories.assert_awaited_once_with()
+        self.assertEqual(categories, result)
 
     @patch("src.controllers.user_activity_controller._service")
     async def test_user_place_details_uses_user_activity_service(

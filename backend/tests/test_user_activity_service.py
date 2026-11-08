@@ -13,6 +13,15 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.repository = Mock()
         self.service = UserActivityService(self.repository)
 
+    async def test_visible_categories_are_returned_by_repository(self):
+        categories = [{"CategoryId": 3, "CategoryName": "Museum"}]
+        self.repository.list_visible_categories = AsyncMock(return_value=categories)
+
+        result = await self.service.list_visible_categories()
+
+        self.assertEqual(categories, result)
+        self.repository.list_visible_categories.assert_awaited_once_with()
+
     async def test_saving_place_is_scoped_to_authenticated_user(self):
         self.repository.get_visible_place = AsyncMock(return_value={"PlaceId": 15})
         self.repository.save_place = AsyncMock()

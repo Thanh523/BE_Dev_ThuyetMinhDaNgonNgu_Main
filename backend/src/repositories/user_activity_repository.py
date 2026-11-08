@@ -40,6 +40,20 @@ class UserActivityRepository:
             {"_id": 0, "CategoryId": 1, "CategoryName": 1, "Description": 1},
         )
 
+    async def list_visible_categories(self) -> list[dict]:
+        # Chỉ hiện danh mục đang được dùng bởi ít nhất một địa điểm công khai.
+        category_ids = await self.places.distinct(
+            "CategoryId",
+            {"IsVisible": {"$ne": False}, "CategoryId": {"$exists": True}},
+        )
+        if not category_ids:
+            return []
+        cursor = self.categories.find(
+            {"CategoryId": {"$in": category_ids}},
+            {"_id": 0, "CategoryId": 1, "CategoryName": 1},
+        ).sort("CategoryName", 1)
+        return await cursor.to_list(length=None)
+
     async def list_place_images(self, place_id: int) -> list[dict]:
         # Một số bản ghi cũ lưu PlaceId dạng chuỗi, nên truy vấn cả chuỗi và số.
         cursor = self.images.find(

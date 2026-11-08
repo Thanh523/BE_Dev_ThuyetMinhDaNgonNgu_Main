@@ -105,6 +105,7 @@ def _service(database) -> UserActivityService:
 @router.get("/places", response_model=PageResponse)
 async def list_user_places(
     search: str = Query(default="", max_length=200),
+    category_id: int | None = Query(default=None, gt=0),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     database=Depends(get_database),
@@ -113,12 +114,21 @@ async def list_user_places(
     # User chỉ được duyệt địa điểm đang hiển thị; dữ liệu ẩn vẫn dành cho admin.
     items, total = await _place_service(database).list_places(
         search,
-        None,
+        category_id,
         "visible",
         skip,
         limit,
     )
     return {"items": items, "total": total, "skip": skip, "limit": limit}
+
+
+@router.get("/categories")
+async def list_user_categories(
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> list[dict]:
+    # Trả danh mục chỉ khi có địa điểm hiển thị thuộc danh mục đó.
+    return await _service(database).list_visible_categories()
 
 
 @router.get("/saved-places", response_model=PageResponse)

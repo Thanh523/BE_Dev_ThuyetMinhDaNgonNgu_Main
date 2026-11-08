@@ -79,6 +79,10 @@ export default function UserDemo({ apiUrl }) {
     confirm_password: "",
   });
   const [places, setPlaces] = useState([]);
+  // Lưu danh mục và lựa chọn hiện tại để bộ lọc vẫn giữ nguyên khi chuyển trang.
+  const [placeCategories, setPlaceCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [placeSearch, setPlaceSearch] = useState("");
   const [submittedPlaceSearch, setSubmittedPlaceSearch] = useState("");
   const [placesSkip, setPlacesSkip] = useState(0);
@@ -115,11 +119,13 @@ export default function UserDemo({ apiUrl }) {
   }, [apiUrl]);
 
   // Chỉ tìm khi submit; cờ active bỏ qua kết quả cũ nếu user đổi trang hoặc bộ lọc.
+  // Gửi category_id cùng truy vấn để backend lọc trước khi phân trang.
   useEffect(() => {
     if (!token) {
       setPlaces([]);
       setPlacesTotal(0);
       setPlacesSkip(0);
+      setPlaceCategories([]);
       return undefined;
     }
 
@@ -129,6 +135,9 @@ export default function UserDemo({ apiUrl }) {
       skip: String(placesSkip),
       limit: String(PLACE_PAGE_LIMIT),
     });
+    if (selectedCategoryId) {
+      params.set("category_id", selectedCategoryId);
+    }
     setPlacesLoading(true);
     userRequest(apiUrl, token, `/api/user/places?${params.toString()}`)
       .then((result) => {
@@ -151,7 +160,7 @@ export default function UserDemo({ apiUrl }) {
     return () => {
       active = false;
     };
-  }, [apiUrl, token, submittedPlaceSearch, placesSkip]);
+  }, [apiUrl, token, submittedPlaceSearch, selectedCategoryId, placesSkip]);
 
   // Đăng ký không tự đăng nhập; sau khi tạo tài khoản, người dùng đăng nhập riêng.
   async function submitAuth(event) {
@@ -201,6 +210,8 @@ export default function UserDemo({ apiUrl }) {
     setSavedPlaces([]);
     setListeningHistory([]);
     setPlaces([]);
+    setPlaceCategories([]);
+    setSelectedCategoryId("");
     setPlacesTotal(0);
     setPlacesSkip(0);
     setPlaceDetails(null);
@@ -381,11 +392,32 @@ export default function UserDemo({ apiUrl }) {
     if (!token) {
       return;
     }
-    refreshActivity(token).catch((requestError) => {
-      setError(requestError.message);
-      setToken("");
-    });
-  }, [token, refreshActivity]);
+    let active = true;
+    setCategoriesLoading(true);
+    Promise.all([
+      refreshActivity(token),
+      userRequest(apiUrl, token, "/api/user/categories"),
+    ])
+      .then(([, categories]) => {
+        if (active) {
+          setPlaceCategories(categories);
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+          setToken("");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCategoriesLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiUrl, token, refreshActivity]);
 
   return (
     <section className="user-demo">
@@ -686,6 +718,28 @@ export default function UserDemo({ apiUrl }) {
                   placeholder="Tên, địa chỉ hoặc từ khóa"
                   value={placeSearch}
                 />
+              </label>
+              <label>
+                Danh mục
+                <select
+                  disabled={categoriesLoading}
+                  onChange={(event) => {
+                    // Đổi danh mục cần quay về trang đầu và đóng chi tiết cũ nếu đang mở.
+                    setPlacesSkip(0);
+                    setSelectedCategoryId(event.target.value);
+                    setPlaceDetails(null);
+                  }}
+                  value={selectedCategoryId}
+                >
+                  <option value="">
+                    {categoriesLoading ? "Đang tải danh mục..." : "Tất cả danh mục"}
+                  </option>
+                  {placeCategories.map((category) => (
+                    <option key={category.CategoryId} value={category.CategoryId}>
+                      {category.CategoryName}
+                    </option>
+                  ))}
+                </select>
               </label>
               <button className="button" disabled={placesLoading} type="submit">
                 Tìm kiếm

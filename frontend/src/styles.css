@@ -829,6 +829,65 @@ input::placeholder {
   margin-bottom: 0;
 }
 
+.user-place-search {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 18px;
+}
+
+.user-place-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.user-place-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafbf8;
+}
+
+.user-place-card h3 {
+  margin: 0 0 7px;
+  color: #37433a;
+  font-size: 15px;
+}
+
+.user-place-card p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.user-place-card .eyebrow {
+  margin-bottom: 7px;
+}
+
+.user-place-empty {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.user-place-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .user-demo-form {
   display: grid;
   gap: 13px;
@@ -1051,6 +1110,10 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .user-place-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .user-filters {
     grid-template-columns: 1fr 1fr;
   }
@@ -1100,8 +1163,13 @@ input::placeholder {
   .user-filters,
   .user-profile-fields,
   .user-demo-inline-form,
+  .user-place-search,
   .user-activity-grid,
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-place-grid {
     grid-template-columns: 1fr;
   }
 

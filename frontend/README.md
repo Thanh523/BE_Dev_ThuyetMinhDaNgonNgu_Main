@@ -17,11 +17,11 @@ The backend allows both `localhost:5173` and `127.0.0.1:5173` by default; restar
 the backend after changing `CORS_ORIGINS`.
 
 The **Demo người dùng** tab works without an admin login. Enter the backend
-URL, register a user, then sign in to try saved places, listening history,
-visitor sessions, and usage events. The user token stays in page memory and is
-not stored in browser storage. Use IDs that already exist in MongoDB for
-`PlaceId`, `AudioId`, and optional `NarrationId`; the backend rejects missing or
-inactive content references.
+URL, register a user, then sign in to browse visible places, search, save and
+unsave places, and try listening history, visitor sessions, and usage events.
+The user token stays in page memory and is not stored in browser storage. Use
+IDs that already exist in MongoDB for `AudioId` and optional `NarrationId`; the
+backend rejects missing or inactive content references.
 
 For admin management, enter the backend URL and admin username/password. A `PlaceId` that exists in
 the `Places` collection is optional during login. The login endpoint returns an

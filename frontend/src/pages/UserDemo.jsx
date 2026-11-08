@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 const PAGE_LIMIT = 20;
+const PLACE_PAGE_LIMIT = 12;
 
 async function userRequest(apiUrl, token, path, options = {}) {
   const headers = new Headers(options.headers);
@@ -63,12 +64,17 @@ export default function UserDemo({ apiUrl }) {
   });
   const [token, setToken] = useState("");
   const [profile, setProfile] = useState(null);
+  const [places, setPlaces] = useState([]);
+  const [placeSearch, setPlaceSearch] = useState("");
+  const [submittedPlaceSearch, setSubmittedPlaceSearch] = useState("");
+  const [placesSkip, setPlacesSkip] = useState(0);
+  const [placesTotal, setPlacesTotal] = useState(0);
+  const [placesLoading, setPlacesLoading] = useState(false);
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [listeningHistory, setListeningHistory] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [usageEvents, setUsageEvents] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState("");
-  const [placeId, setPlaceId] = useState("");
   const [listeningForm, setListeningForm] = useState({
     audio_id: "",
     played_seconds: "0",
@@ -124,6 +130,44 @@ export default function UserDemo({ apiUrl }) {
     ));
   }, [apiUrl]);
 
+  useEffect(() => {
+    if (!token) {
+      setPlaces([]);
+      setPlacesTotal(0);
+      setPlacesSkip(0);
+      return undefined;
+    }
+
+    let active = true;
+    const params = new URLSearchParams({
+      search: submittedPlaceSearch,
+      skip: String(placesSkip),
+      limit: String(PLACE_PAGE_LIMIT),
+    });
+    setPlacesLoading(true);
+    userRequest(apiUrl, token, `/api/user/places?${params.toString()}`)
+      .then((result) => {
+        if (active) {
+          setPlaces(result.items);
+          setPlacesTotal(result.total);
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setPlacesLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiUrl, token, submittedPlaceSearch, placesSkip]);
+
   // Đăng ký không tự đăng nhập; sau khi tạo tài khoản, người dùng đăng nhập riêng.
   async function submitAuth(event) {
     event.preventDefault();
@@ -165,6 +209,9 @@ export default function UserDemo({ apiUrl }) {
     setListeningHistory([]);
     setSessions([]);
     setUsageEvents([]);
+    setPlaces([]);
+    setPlacesTotal(0);
+    setPlacesSkip(0);
     setSelectedSessionId("");
     setNotice("Đã đăng xuất user.");
     setError("");
@@ -188,18 +235,18 @@ export default function UserDemo({ apiUrl }) {
     }
   }
 
-  async function savePlace(event) {
-    event.preventDefault();
-    const id = Number(placeId);
-    if (!Number.isSafeInteger(id) || id <= 0) {
-      setError("Nhập PlaceId là số nguyên dương.");
-      return;
-    }
+  async function toggleSavedPlace(place) {
+    const isSaved = savedPlaces.some(
+      (item) => Number(item.PlaceId) === Number(place.PlaceId),
+    );
     await runAction(
-      () => userRequest(apiUrl, token, `/api/user/saved-places/${id}`, {
-        method: "POST",
-      }),
-      "Đã lưu địa điểm.",
+      () => userRequest(
+        apiUrl,
+        token,
+        `/api/user/saved-places/${place.PlaceId}`,
+        { method: isSaved ? "DELETE" : "POST" },
+      ),
+      isSaved ? "Đã bỏ lưu địa điểm." : "Đã lưu địa điểm.",
       () => refreshActivity(token),
     );
   }
@@ -403,6 +450,98 @@ export default function UserDemo({ apiUrl }) {
             </p>
           </section>
 
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">EXPLORE PLACES</p>
+                <h2>Khám phá địa điểm</h2>
+              </div>
+              <span className="muted-count">{placesTotal} địa điểm</span>
+            </div>
+            <form
+              className="place-filters user-place-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setPlacesSkip(0);
+                setSubmittedPlaceSearch(placeSearch.trim());
+              }}
+            >
+              <label>
+                Tìm địa điểm
+                <input
+                  onChange={(event) => setPlaceSearch(event.target.value)}
+                  placeholder="Tên, địa chỉ hoặc từ khóa"
+                  value={placeSearch}
+                />
+              </label>
+              <button className="button" disabled={placesLoading} type="submit">
+                Tìm kiếm
+              </button>
+            </form>
+            {placesLoading ? (
+              <p className="user-place-empty">Đang tải địa điểm...</p>
+            ) : places.length === 0 ? (
+              <p className="user-place-empty">Không tìm thấy địa điểm phù hợp.</p>
+            ) : (
+              <div className="user-place-grid">
+                {places.map((place) => {
+                  const isSaved = savedPlaces.some(
+                    (item) => Number(item.PlaceId) === Number(place.PlaceId),
+                  );
+                  return (
+                    <article className="user-place-card" key={place.PlaceId}>
+                      <div>
+                        <p className="eyebrow">ĐỊA ĐIỂM #{place.PlaceId}</p>
+                        <h3>{place.PlaceName}</h3>
+                        <p>{place.Address}</p>
+                      </div>
+                      <button
+                        aria-pressed={isSaved}
+                        className={`button ${isSaved ? "button-outline" : ""}`}
+                        disabled={busy}
+                        onClick={() => toggleSavedPlace(place)}
+                        type="button"
+                      >
+                        {isSaved ? "Đã lưu · Bỏ lưu" : "Lưu địa điểm"}
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+            {placesTotal > PLACE_PAGE_LIMIT && (
+              <div className="user-place-pagination">
+                <button
+                  className="button button-outline"
+                  disabled={placesLoading || placesSkip === 0}
+                  onClick={() => setPlacesSkip((current) => (
+                    Math.max(0, current - PLACE_PAGE_LIMIT)
+                  ))}
+                  type="button"
+                >
+                  Trang trước
+                </button>
+                <span>
+                  Trang {Math.floor(placesSkip / PLACE_PAGE_LIMIT) + 1} /{" "}
+                  {Math.ceil(placesTotal / PLACE_PAGE_LIMIT)}
+                </span>
+                <button
+                  className="button button-outline"
+                  disabled={
+                    placesLoading
+                    || placesSkip + PLACE_PAGE_LIMIT >= placesTotal
+                  }
+                  onClick={() => setPlacesSkip((current) => (
+                    current + PLACE_PAGE_LIMIT
+                  ))}
+                  type="button"
+                >
+                  Trang sau
+                </button>
+              </div>
+            )}
+          </section>
+
           <section className="user-demo-grid">
             <section className="panel">
               <div className="section-heading">
@@ -412,25 +551,15 @@ export default function UserDemo({ apiUrl }) {
                 </div>
                 <span className="muted-count">{savedPlaces.length} mục gần nhất</span>
               </div>
-              <form className="user-demo-inline-form" onSubmit={savePlace}>
-                <label>
-                  PlaceId
-                  <input
-                    inputMode="numeric"
-                    onChange={(event) => setPlaceId(event.target.value)}
-                    placeholder="Ví dụ: 1"
-                    required
-                    value={placeId}
-                  />
-                </label>
-                <button className="button" disabled={busy} type="submit">
-                  Lưu địa điểm
-                </button>
-              </form>
               <ul className="user-demo-list">
                 {savedPlaces.map((item) => (
                   <li key={item.SavedPlaceId}>
-                    <span>Địa điểm #{item.PlaceId} · {formatDate(item.SavedAt)}</span>
+                    <span>
+                      {places.find(
+                        (place) => Number(place.PlaceId) === Number(item.PlaceId),
+                      )?.PlaceName ?? `Địa điểm #${item.PlaceId}`}
+                      <small>Đã lưu lúc {formatDate(item.SavedAt)}</small>
+                    </span>
                     <button
                       className="text-button danger-text"
                       disabled={busy}

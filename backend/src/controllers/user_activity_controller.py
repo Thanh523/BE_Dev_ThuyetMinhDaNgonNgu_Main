@@ -6,7 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from src.config.database import get_database
 from src.config.settings import get_settings
 from src.middlewares.user_auth import require_user
+from src.repositories.category_repository import CategoryRepository
+from src.repositories.place_repository import PlaceRepository
 from src.repositories.user_activity_repository import UserActivityRepository
+from src.services.place_service import PlaceService
 from src.services.user_activity_service import UserActivityService
 
 
@@ -75,6 +78,15 @@ class PageResponse(BaseModel):
     limit: int
 
 
+def _place_service(database) -> PlaceService:
+    settings = get_settings()
+    return PlaceService(
+        PlaceRepository(database, settings),
+        CategoryRepository(database, settings),
+        settings.image_storage_dir,
+    )
+
+
 class VisitorSessionView(BaseModel):
     # Hợp đồng response thống nhất LastSeenAt theo ERD.
     model_config = ConfigDict(populate_by_name=True)
@@ -88,6 +100,25 @@ class VisitorSessionView(BaseModel):
 def _service(database) -> UserActivityService:
     # Một service dùng chung cho các luồng hoạt động của user đã xác thực.
     return UserActivityService(UserActivityRepository(database, get_settings()))
+
+
+@router.get("/places", response_model=PageResponse)
+async def list_user_places(
+    search: str = Query(default="", max_length=200),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> dict:
+    # User chỉ được duyệt địa điểm đang hiển thị; dữ liệu ẩn vẫn dành cho admin.
+    items, total = await _place_service(database).list_places(
+        search,
+        None,
+        "visible",
+        skip,
+        limit,
+    )
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
 
 
 @router.get("/saved-places", response_model=PageResponse)

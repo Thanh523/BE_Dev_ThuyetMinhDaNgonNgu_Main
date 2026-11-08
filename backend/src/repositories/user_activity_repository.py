@@ -118,7 +118,31 @@ class UserActivityRepository:
             .skip(skip)
             .limit(limit)
         )
-        return await cursor.to_list(length=limit), await self.saved_places.count_documents(query)
+        items = await cursor.to_list(length=limit)
+        total = await self.saved_places.count_documents(query)
+
+        # Tên được ghép theo ID đã lưu, không phụ thuộc trang khám phá hiện tại.
+        place_ids = {
+            place_id
+            for item in items
+            if (place_id := item.get("PlaceId")) is not None
+        }
+        query_place_ids = place_ids | {
+            str(place_id) for place_id in place_ids
+        }
+        if query_place_ids:
+            places = await self.places.find(
+                {"PlaceId": {"$in": list(query_place_ids)}},
+                {"_id": 0, "PlaceId": 1, "PlaceName": 1},
+            ).to_list(length=len(query_place_ids))
+            names_by_id = {
+                str(place["PlaceId"]): place.get("PlaceName")
+                for place in places
+            }
+            for item in items:
+                item["PlaceName"] = names_by_id.get(str(item.get("PlaceId")))
+
+        return items, total
 
     async def save_place(self, user_id: str, place_id: int, now: datetime) -> None:
         # Unique index (UserId, PlaceId) bảo đảm lưu lặp lại không tạo bookmark trùng.

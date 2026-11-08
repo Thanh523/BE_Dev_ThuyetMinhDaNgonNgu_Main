@@ -1,11 +1,29 @@
 from datetime import datetime, timezone
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 
 from src.repositories.user_activity_repository import UserActivityRepository
 from src.services.user_activity_service import UserActivityService
+
+
+class FakeMongoCursor:
+    def __init__(self, items):
+        self.items = items
+
+    def sort(self, *_):
+        return self
+
+    def skip(self, _):
+        return self
+
+    def limit(self, _):
+        return self
+
+    async def to_list(self, length):
+        return self.items[:length]
 
 
 class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -21,6 +39,50 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(categories, result)
         self.repository.list_visible_categories.assert_awaited_once_with()
+
+    async def test_saved_places_include_names_even_when_place_is_not_in_discovery_page(self):
+        saved_places = Mock()
+        saved_places.find.return_value = FakeMongoCursor([
+            {"SavedPlaceId": "saved-1", "PlaceId": 15, "SavedAt": None},
+            {"SavedPlaceId": "saved-2", "PlaceId": "16", "SavedAt": None},
+        ])
+        saved_places.count_documents = AsyncMock(return_value=2)
+        places = Mock()
+        places.find.return_value = FakeMongoCursor([
+            {"PlaceId": 15, "PlaceName": "Museum"},
+            {"PlaceId": 16, "PlaceName": "Gallery"},
+        ])
+        collections = {
+            "SavedPlaces": saved_places,
+            "ListeningHistory": Mock(),
+            "VisitorSessions": Mock(),
+            "UsageEvents": Mock(),
+            "Places": places,
+            "Categories": Mock(),
+            "PlaceImages": Mock(),
+            "PlaceAudios": Mock(),
+            "Narrations": Mock(),
+        }
+        database = MagicMock()
+        database.__getitem__.side_effect = lambda name: collections[name]
+        settings = SimpleNamespace(
+            saved_places_collection="SavedPlaces",
+            listening_history_collection="ListeningHistory",
+            visitor_sessions_collection="VisitorSessions",
+            usage_events_collection="UsageEvents",
+            places_collection="Places",
+            categories_collection="Categories",
+            place_images_collection="PlaceImages",
+            audio_collection="PlaceAudios",
+            narrations_collection="Narrations",
+        )
+        repository = UserActivityRepository(database, settings)
+
+        items, total = await repository.list_saved_places("user-1", 10, 10)
+
+        self.assertEqual(2, total)
+        self.assertEqual(["Museum", "Gallery"], [item["PlaceName"] for item in items])
+        places.find.assert_called_once()
 
     async def test_saving_place_is_scoped_to_authenticated_user(self):
         self.repository.get_visible_place = AsyncMock(return_value={"PlaceId": 15})

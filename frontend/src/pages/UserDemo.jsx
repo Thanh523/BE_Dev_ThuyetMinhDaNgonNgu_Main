@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 const PAGE_LIMIT = 20;
 const PLACE_PAGE_LIMIT = 12;
+const SAVED_PLACES_PAGE_LIMIT = 10;
 
 // Giữ mã HTTP để giao diện phân biệt lỗi dữ liệu với audio đã bị xóa/ngừng hoạt động.
 class ApiRequestError extends Error {
@@ -92,6 +93,9 @@ export default function UserDemo({ apiUrl }) {
   const [loadingPlaceDetailsId, setLoadingPlaceDetailsId] = useState(null);
   const [audiosByPlace, setAudiosByPlace] = useState({});
   const [savedPlaces, setSavedPlaces] = useState([]);
+  const [savedPlacesTotal, setSavedPlacesTotal] = useState(0);
+  const [savedPlacesSkip, setSavedPlacesSkip] = useState(0);
+  const [savedPlacesLoading, setSavedPlacesLoading] = useState(false);
   const [listeningHistory, setListeningHistory] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -99,13 +103,8 @@ export default function UserDemo({ apiUrl }) {
 
   // Tải dữ liệu cá nhân bằng token user; API tự giới hạn dữ liệu theo tài khoản.
   const refreshActivity = useCallback(async (activeToken) => {
-    const [currentProfile, saved, history] = await Promise.all([
+    const [currentProfile, history] = await Promise.all([
       userRequest(apiUrl, activeToken, "/api/user/auth/me"),
-      userRequest(
-        apiUrl,
-        activeToken,
-        `/api/user/saved-places?skip=0&limit=${PAGE_LIMIT}`,
-      ),
       userRequest(
         apiUrl,
         activeToken,
@@ -114,9 +113,50 @@ export default function UserDemo({ apiUrl }) {
     ]);
     setProfile(currentProfile);
     setProfileForm({ full_name: currentProfile.FullName });
-    setSavedPlaces(saved.items);
     setListeningHistory(history.items);
   }, [apiUrl]);
+
+  const loadSavedPlaces = useCallback(async (activeToken, skip = savedPlacesSkip) => {
+    return userRequest(
+      apiUrl,
+      activeToken,
+      `/api/user/saved-places?skip=${skip}&limit=${SAVED_PLACES_PAGE_LIMIT}`,
+    );
+  }, [apiUrl, savedPlacesSkip]);
+
+  // Tải trang bookmark đang chọn; bỏ kết quả cũ nếu user đổi trang giữa lúc chờ API.
+  useEffect(() => {
+    if (!token) {
+      setSavedPlaces([]);
+      setSavedPlacesTotal(0);
+      setSavedPlacesSkip(0);
+      return undefined;
+    }
+
+    let active = true;
+    setSavedPlacesLoading(true);
+    loadSavedPlaces(token, savedPlacesSkip)
+      .then((saved) => {
+        if (active) {
+          setSavedPlaces(saved.items);
+          setSavedPlacesTotal(saved.total);
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setSavedPlacesLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token, savedPlacesSkip, loadSavedPlaces]);
 
   // Chỉ tìm khi submit; cờ active bỏ qua kết quả cũ nếu user đổi trang hoặc bộ lọc.
   // Gửi category_id cùng truy vấn để backend lọc trước khi phân trang.
@@ -208,6 +248,8 @@ export default function UserDemo({ apiUrl }) {
       confirm_password: "",
     });
     setSavedPlaces([]);
+    setSavedPlacesTotal(0);
+    setSavedPlacesSkip(0);
     setListeningHistory([]);
     setPlaces([]);
     setPlaceCategories([]);
@@ -251,7 +293,22 @@ export default function UserDemo({ apiUrl }) {
         { method: isSaved ? "DELETE" : "POST" },
       ),
       isSaved ? "Đã bỏ lưu địa điểm." : "Đã lưu địa điểm.",
-      () => refreshActivity(token),
+      async () => {
+        await refreshActivity(token);
+        const saved = await loadSavedPlaces(token, savedPlacesSkip);
+        if (
+          isSaved
+          && saved.items.length === 0
+          && savedPlacesSkip > 0
+        ) {
+          const previousSkip = Math.max(
+            0,
+            savedPlacesSkip - SAVED_PLACES_PAGE_LIMIT,
+          );
+          setSavedPlacesSkip(previousSkip);
+          await loadSavedPlaces(token, previousSkip);
+        }
+      },
     );
   }
 
@@ -383,7 +440,18 @@ export default function UserDemo({ apiUrl }) {
         { method: "DELETE" },
       ),
       "Đã bỏ lưu địa điểm.",
-      () => refreshActivity(token),
+      async () => {
+        await refreshActivity(token);
+        const nextSkip = (
+          savedPlaces.length === 1 && savedPlacesSkip > 0
+            ? Math.max(0, savedPlacesSkip - SAVED_PLACES_PAGE_LIMIT)
+            : savedPlacesSkip
+        );
+        if (nextSkip !== savedPlacesSkip) {
+          setSavedPlacesSkip(nextSkip);
+        }
+        await loadSavedPlaces(token, nextSkip);
+      },
     );
   }
 
@@ -952,15 +1020,13 @@ export default function UserDemo({ apiUrl }) {
                   <p className="eyebrow">SAVED PLACES</p>
                   <h2>Địa điểm đã lưu</h2>
                 </div>
-                <span className="muted-count">{savedPlaces.length} mục gần nhất</span>
+                <span className="muted-count">{savedPlacesTotal} địa điểm</span>
               </div>
               <ul className="user-demo-list">
                 {savedPlaces.map((item) => (
                   <li key={item.SavedPlaceId}>
                     <span>
-                      {places.find(
-                        (place) => Number(place.PlaceId) === Number(item.PlaceId),
-                      )?.PlaceName ?? `Địa điểm #${item.PlaceId}`}
+                      {item.PlaceName ?? "Địa điểm không còn tồn tại"}
                       <small>Đã lưu lúc {formatDate(item.SavedAt)}</small>
                     </span>
                     <button
@@ -973,8 +1039,43 @@ export default function UserDemo({ apiUrl }) {
                     </button>
                   </li>
                 ))}
-                {savedPlaces.length === 0 && <li className="muted-row">Chưa lưu địa điểm nào.</li>}
+                {savedPlacesLoading ? (
+                  <li className="muted-row">Đang tải địa điểm đã lưu...</li>
+                ) : savedPlaces.length === 0 ? (
+                  <li className="muted-row">Chưa lưu địa điểm nào.</li>
+                ) : null}
               </ul>
+              {savedPlacesTotal > SAVED_PLACES_PAGE_LIMIT && (
+                <div className="user-place-pagination">
+                  <button
+                    className="button button-outline"
+                    disabled={savedPlacesLoading || savedPlacesSkip === 0}
+                    onClick={() => setSavedPlacesSkip((current) => (
+                      Math.max(0, current - SAVED_PLACES_PAGE_LIMIT)
+                    ))}
+                    type="button"
+                  >
+                    Trang trước
+                  </button>
+                  <span>
+                    Trang {Math.floor(savedPlacesSkip / SAVED_PLACES_PAGE_LIMIT) + 1} /{" "}
+                    {Math.ceil(savedPlacesTotal / SAVED_PLACES_PAGE_LIMIT)}
+                  </span>
+                  <button
+                    className="button button-outline"
+                    disabled={
+                      savedPlacesLoading
+                      || savedPlacesSkip + SAVED_PLACES_PAGE_LIMIT >= savedPlacesTotal
+                    }
+                    onClick={() => setSavedPlacesSkip((current) => (
+                      current + SAVED_PLACES_PAGE_LIMIT
+                    ))}
+                    type="button"
+                  >
+                    Trang sau
+                  </button>
+                </div>
+              )}
             </section>
 
             <section className="panel">

@@ -18,8 +18,8 @@ the backend after changing `CORS_ORIGINS`.
 
 The **Demo người dùng** tab works without an admin login. Enter the backend
 URL, register a user, then sign in to browse visible places, search, save and
-unsave places, play active audio narrations, and try visitor sessions and usage
-events. Listening progress is recorded when playback is paused or completed.
+unsave places, and play active audio narrations. Listening progress is recorded
+when playback is paused or completed and shown in the listening history.
 The user token stays in page memory and is not stored in browser storage. Use
 IDs that already exist in MongoDB for `AudioId` and optional `NarrationId`; the
 backend rejects missing or inactive content references.

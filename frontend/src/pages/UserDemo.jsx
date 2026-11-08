@@ -61,11 +61,6 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN");
 }
 
-function newEventId() {
-  return globalThis.crypto?.randomUUID?.()
-    ?? `event-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 export default function UserDemo({ apiUrl }) {
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({
@@ -86,62 +81,28 @@ export default function UserDemo({ apiUrl }) {
   const [loadingAudioPlaceId, setLoadingAudioPlaceId] = useState(null);
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [listeningHistory, setListeningHistory] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [usageEvents, setUsageEvents] = useState([]);
-  const [selectedSessionId, setSelectedSessionId] = useState("");
-  const [listeningForm, setListeningForm] = useState({
-    audio_id: "",
-    played_seconds: "0",
-    is_completed: false,
-  });
-  const [eventForm, setEventForm] = useState({
-    client_event_id: newEventId(),
-    event_type: "audio_play",
-    narration_id: "",
-    audio_id: "",
-  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   // Tải dữ liệu cá nhân bằng token user; API tự giới hạn dữ liệu theo tài khoản.
   const refreshActivity = useCallback(async (activeToken) => {
-    const [currentProfile, saved, history, sessionPage, eventPage] =
-      await Promise.all([
-        userRequest(apiUrl, activeToken, "/api/user/auth/me"),
-        userRequest(
-          apiUrl,
-          activeToken,
-          `/api/user/saved-places?skip=0&limit=${PAGE_LIMIT}`,
-        ),
-        userRequest(
-          apiUrl,
-          activeToken,
-          `/api/user/listening-history?skip=0&limit=${PAGE_LIMIT}`,
-        ),
-        userRequest(
-          apiUrl,
-          activeToken,
-          `/api/user/sessions?skip=0&limit=${PAGE_LIMIT}`,
-        ),
-        userRequest(
-          apiUrl,
-          activeToken,
-          `/api/user/usage-events?skip=0&limit=${PAGE_LIMIT}`,
-        ),
-      ]);
+    const [currentProfile, saved, history] = await Promise.all([
+      userRequest(apiUrl, activeToken, "/api/user/auth/me"),
+      userRequest(
+        apiUrl,
+        activeToken,
+        `/api/user/saved-places?skip=0&limit=${PAGE_LIMIT}`,
+      ),
+      userRequest(
+        apiUrl,
+        activeToken,
+        `/api/user/listening-history?skip=0&limit=${PAGE_LIMIT}`,
+      ),
+    ]);
     setProfile(currentProfile);
     setSavedPlaces(saved.items);
     setListeningHistory(history.items);
-    setSessions(sessionPage.items);
-    setUsageEvents(eventPage.items);
-    setSelectedSessionId((current) => (
-      current && sessionPage.items.some(
-        (session) => session.SessionId === current && !session.EndedAt,
-      )
-        ? current
-        : sessionPage.items.find((session) => !session.EndedAt)?.SessionId ?? ""
-    ));
   }, [apiUrl]);
 
   // Chỉ tìm khi submit; cờ active bỏ qua kết quả cũ nếu user đổi trang hoặc bộ lọc.
@@ -222,15 +183,12 @@ export default function UserDemo({ apiUrl }) {
     setProfile(null);
     setSavedPlaces([]);
     setListeningHistory([]);
-    setSessions([]);
-    setUsageEvents([]);
     setPlaces([]);
     setPlacesTotal(0);
     setPlacesSkip(0);
     setAudiosByPlace({});
     setSelectedAudioPlaceId(null);
     setLoadingAudioPlaceId(null);
-    setSelectedSessionId("");
     setNotice("Đã đăng xuất user.");
     setError("");
   }
@@ -359,75 +317,6 @@ export default function UserDemo({ apiUrl }) {
       ),
       "Đã bỏ lưu địa điểm.",
       () => refreshActivity(token),
-    );
-  }
-
-  async function recordListening(event) {
-    event.preventDefault();
-    await runAction(
-      () => userRequest(apiUrl, token, "/api/user/listening-history", {
-        method: "POST",
-        body: JSON.stringify({
-          audio_id: listeningForm.audio_id,
-          played_seconds: Number(listeningForm.played_seconds),
-          is_completed: listeningForm.is_completed,
-        }),
-      }),
-      "Đã ghi lịch sử nghe.",
-      () => refreshActivity(token),
-    );
-  }
-
-  async function createSession() {
-    await runAction(
-      () => userRequest(apiUrl, token, "/api/user/sessions", { method: "POST" }),
-      "Đã tạo phiên truy cập.",
-      () => refreshActivity(token),
-    );
-  }
-
-  async function updateSession(session, endSession) {
-    await runAction(
-      () => userRequest(
-        apiUrl,
-        token,
-        `/api/user/sessions/${encodeURIComponent(session.SessionId)}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ end_session: endSession }),
-        },
-      ),
-      endSession ? "Đã kết thúc phiên." : "Đã cập nhật LastSeenAt.",
-      () => refreshActivity(token),
-    );
-  }
-
-  async function recordEvent(event) {
-    event.preventDefault();
-    if (!selectedSessionId) {
-      setError("Hãy tạo hoặc chọn phiên đang hoạt động trước.");
-      return;
-    }
-    // Chỉ đổi ClientEventId sau khi ghi thành công, để gửi lại cùng ID không tạo event trùng.
-    await runAction(
-      () => userRequest(apiUrl, token, "/api/user/usage-events", {
-        method: "POST",
-        body: JSON.stringify({
-          client_event_id: eventForm.client_event_id,
-          session_id: selectedSessionId,
-          event_type: eventForm.event_type,
-          narration_id: eventForm.narration_id || null,
-          audio_id: eventForm.audio_id || null,
-        }),
-      }),
-      "Đã ghi sự kiện sử dụng.",
-      async () => {
-        setEventForm((current) => ({
-          ...current,
-          client_event_id: newEventId(),
-        }));
-        await refreshActivity(token);
-      },
     );
   }
 
@@ -742,47 +631,6 @@ export default function UserDemo({ apiUrl }) {
                 </div>
                 <span className="muted-count">{listeningHistory.length} lượt gần nhất</span>
               </div>
-              <form className="user-demo-form" onSubmit={recordListening}>
-                <label>
-                  AudioId
-                  <input
-                    onChange={(event) => setListeningForm((current) => ({
-                      ...current,
-                      audio_id: event.target.value,
-                    }))}
-                    required
-                    value={listeningForm.audio_id}
-                  />
-                </label>
-                <label>
-                  Số giây đã nghe
-                  <input
-                    inputMode="numeric"
-                    min="0"
-                    onChange={(event) => setListeningForm((current) => ({
-                      ...current,
-                      played_seconds: event.target.value,
-                    }))}
-                    required
-                    type="number"
-                    value={listeningForm.played_seconds}
-                  />
-                </label>
-                <label className="user-demo-checkbox">
-                  <input
-                    checked={listeningForm.is_completed}
-                    onChange={(event) => setListeningForm((current) => ({
-                      ...current,
-                      is_completed: event.target.checked,
-                    }))}
-                    type="checkbox"
-                  />
-                  Đã nghe hoàn tất
-                </label>
-                <button className="button" disabled={busy} type="submit">
-                  Ghi lịch sử
-                </button>
-              </form>
               <ul className="user-demo-list">
                 {listeningHistory.map((item) => (
                   <li key={item.ListeningHistoryId}>
@@ -794,139 +642,6 @@ export default function UserDemo({ apiUrl }) {
                   </li>
                 ))}
                 {listeningHistory.length === 0 && <li className="muted-row">Chưa có lịch sử nghe.</li>}
-              </ul>
-            </section>
-
-            <section className="panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">VISITOR SESSIONS</p>
-                  <h2>Phiên truy cập</h2>
-                </div>
-                <button className="button" disabled={busy} onClick={createSession} type="button">
-                  Tạo phiên
-                </button>
-              </div>
-              <ul className="user-demo-list">
-                {sessions.map((session) => (
-                  <li key={session.SessionId} className="user-demo-session">
-                    <label className="user-demo-radio">
-                      <input
-                        checked={selectedSessionId === session.SessionId}
-                        disabled={Boolean(session.EndedAt)}
-                        onChange={() => setSelectedSessionId(session.SessionId)}
-                        type="radio"
-                        name="active-session"
-                      />
-                      <span>
-                        <strong>{session.SessionId}</strong>
-                        <small>
-                          Bắt đầu {formatDate(session.StartedAt)} · cập nhật{" "}
-                          {formatDate(session.LastSeenAt)} ·{" "}
-                          {session.EndedAt ? "Đã kết thúc" : "Đang hoạt động"}
-                        </small>
-                      </span>
-                    </label>
-                    {!session.EndedAt && (
-                      <div className="user-demo-actions">
-                        <button
-                          className="text-button"
-                          disabled={busy}
-                          onClick={() => updateSession(session, false)}
-                          type="button"
-                        >
-                          Cập nhật
-                        </button>
-                        <button
-                          className="text-button danger-text"
-                          disabled={busy}
-                          onClick={() => updateSession(session, true)}
-                          type="button"
-                        >
-                          Kết thúc
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                ))}
-                {sessions.length === 0 && <li className="muted-row">Chưa tạo phiên nào.</li>}
-              </ul>
-            </section>
-
-            <section className="panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">USAGE EVENTS</p>
-                  <h2>Sự kiện sử dụng</h2>
-                </div>
-                <span className="muted-count">{usageEvents.length} sự kiện gần nhất</span>
-              </div>
-              <form className="user-demo-form" onSubmit={recordEvent}>
-                <label>
-                  ClientEventId (duy nhất cho mỗi event)
-                  <input
-                    onChange={(event) => setEventForm((current) => ({
-                      ...current,
-                      client_event_id: event.target.value,
-                    }))}
-                    required
-                    value={eventForm.client_event_id}
-                  />
-                </label>
-                <label>
-                  Loại sự kiện
-                  <input
-                    maxLength={100}
-                    onChange={(event) => setEventForm((current) => ({
-                      ...current,
-                      event_type: event.target.value,
-                    }))}
-                    required
-                    value={eventForm.event_type}
-                  />
-                </label>
-                <label>
-                  NarrationId (không bắt buộc)
-                  <input
-                    onChange={(event) => setEventForm((current) => ({
-                      ...current,
-                      narration_id: event.target.value,
-                    }))}
-                    value={eventForm.narration_id}
-                  />
-                </label>
-                <label>
-                  AudioId (không bắt buộc)
-                  <input
-                    onChange={(event) => setEventForm((current) => ({
-                      ...current,
-                      audio_id: event.target.value,
-                    }))}
-                    value={eventForm.audio_id}
-                  />
-                </label>
-                <button
-                  className="button"
-                  disabled={busy || !selectedSessionId}
-                  type="submit"
-                >
-                  Ghi event
-                </button>
-              </form>
-              <p className="hint">
-                Event gắn với phiên đang chọn. Gửi lại cùng ClientEventId và
-                nội dung để thử cơ chế retry không tạo bản ghi trùng.
-              </p>
-              <ul className="user-demo-list">
-                {usageEvents.map((item) => (
-                  <li key={item.EventId}>
-                    <span>
-                      {item.EventType} · phiên {item.SessionId} ·{" "}
-                      {formatDate(item.CreatedAt)}
-                    </span>
-                  </li>
-                ))}
-                {usageEvents.length === 0 && <li className="muted-row">Chưa có event nào.</li>}
               </ul>
             </section>
           </section>

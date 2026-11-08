@@ -143,6 +143,28 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("City Museum", items[0]["PlaceName"])
         self.assertEqual(15, items[0]["PlaceId"])
 
+    async def test_deleting_history_entry_is_scoped_to_user(self):
+        self.repository.delete_listening_history_entry = AsyncMock(return_value=True)
+
+        result = await self.service.delete_listening_history_entry(
+            "user-1",
+            "history-1",
+        )
+
+        self.assertTrue(result)
+        self.repository.delete_listening_history_entry.assert_awaited_once_with(
+            "user-1",
+            "history-1",
+        )
+
+    async def test_clearing_history_is_scoped_to_user(self):
+        self.repository.clear_listening_history = AsyncMock(return_value=4)
+
+        result = await self.service.clear_listening_history("user-1")
+
+        self.assertEqual(4, result)
+        self.repository.clear_listening_history.assert_awaited_once_with("user-1")
+
     async def test_saving_place_is_scoped_to_authenticated_user(self):
         self.repository.get_visible_place = AsyncMock(return_value={"PlaceId": 15})
         self.repository.save_place = AsyncMock()
@@ -332,6 +354,37 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
 
 
 class UserActivityRepositoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_delete_history_entry_filters_by_user_and_history_id(self):
+        repository = object.__new__(UserActivityRepository)
+        repository.listening_history = Mock()
+        repository.listening_history.delete_one = AsyncMock(
+            return_value=SimpleNamespace(deleted_count=1),
+        )
+
+        result = await repository.delete_listening_history_entry(
+            "user-1",
+            "history-1",
+        )
+
+        self.assertTrue(result)
+        repository.listening_history.delete_one.assert_awaited_once_with(
+            {"UserId": "user-1", "ListeningHistoryId": "history-1"},
+        )
+
+    async def test_clear_history_filters_by_user(self):
+        repository = object.__new__(UserActivityRepository)
+        repository.listening_history = Mock()
+        repository.listening_history.delete_many = AsyncMock(
+            return_value=SimpleNamespace(deleted_count=3),
+        )
+
+        result = await repository.clear_listening_history("user-1")
+
+        self.assertEqual(3, result)
+        repository.listening_history.delete_many.assert_awaited_once_with(
+            {"UserId": "user-1"},
+        )
+
     async def test_record_listening_response_omits_mongo_internal_id(self):
         repository = object.__new__(UserActivityRepository)
         repository.listening_history = Mock()

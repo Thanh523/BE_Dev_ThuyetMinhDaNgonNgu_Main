@@ -199,6 +199,33 @@ async def list_listening_history(
     )
 
 
+@router.delete("/listening-history", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_listening_history(
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> Response:
+    # Chỉ xóa lịch sử thuộc tài khoản trong token hiện tại.
+    await _service(database).clear_listening_history(claims["UserId"])
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/listening-history/{history_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_listening_history_entry(
+    history_id: str = Path(min_length=1, max_length=128),
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> Response:
+    # ID bản ghi và UserId cùng nằm trong điều kiện xóa để không đụng user khác.
+    await _service(database).delete_listening_history_entry(
+        claims["UserId"],
+        history_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/listening-history", status_code=status.HTTP_201_CREATED)
 async def record_listening(
     request: ListeningCreate,

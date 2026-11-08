@@ -102,6 +102,8 @@ export default function UserDemo({ apiUrl }) {
   const [listeningHistoryLoading, setListeningHistoryLoading] = useState(false);
   const [listeningHistoryRefresh, setListeningHistoryRefresh] = useState(0);
   const [replayingHistoryId, setReplayingHistoryId] = useState(null);
+  const [deletingHistoryId, setDeletingHistoryId] = useState(null);
+  const [clearingListeningHistory, setClearingListeningHistory] = useState(false);
   const [pendingReplayAudioId, setPendingReplayAudioId] = useState(null);
   const audioElements = useRef(new Map());
   const [busy, setBusy] = useState(false);
@@ -127,6 +129,8 @@ export default function UserDemo({ apiUrl }) {
       setListeningHistory([]);
       setListeningHistoryTotal(0);
       setListeningHistorySkip(0);
+      setDeletingHistoryId(null);
+      setClearingListeningHistory(false);
       return undefined;
     }
 
@@ -310,6 +314,8 @@ export default function UserDemo({ apiUrl }) {
     setListeningHistory([]);
     setListeningHistoryTotal(0);
     setListeningHistorySkip(0);
+    setDeletingHistoryId(null);
+    setClearingListeningHistory(false);
     setPlaces([]);
     setPlaceCategories([]);
     setSelectedCategoryId("");
@@ -477,6 +483,67 @@ export default function UserDemo({ apiUrl }) {
       );
     } finally {
       setReplayingHistoryId(null);
+    }
+  }
+
+  async function deleteListeningHistoryEntry(item) {
+    if (!window.confirm("Xóa lượt nghe này khỏi lịch sử?")) {
+      return;
+    }
+
+    setDeletingHistoryId(item.ListeningHistoryId);
+    setError("");
+    setNotice("");
+    try {
+      await userRequest(
+        apiUrl,
+        token,
+        `/api/user/listening-history/${encodeURIComponent(item.ListeningHistoryId)}`,
+        { method: "DELETE" },
+      );
+      setListeningHistory((current) => current.filter(
+        (entry) => entry.ListeningHistoryId !== item.ListeningHistoryId,
+      ));
+      setListeningHistoryTotal((current) => Math.max(0, current - 1));
+      setNotice("Đã xóa lượt nghe khỏi lịch sử.");
+
+      if (listeningHistory.length === 1 && listeningHistorySkip > 0) {
+        setListeningHistorySkip((current) => (
+          Math.max(0, current - LISTENING_HISTORY_PAGE_LIMIT)
+        ));
+      } else {
+        setListeningHistoryRefresh((current) => current + 1);
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDeletingHistoryId(null);
+    }
+  }
+
+  async function clearListeningHistory() {
+    if (!window.confirm("Xóa toàn bộ lịch sử nghe? Thao tác này không thể hoàn tác.")) {
+      return;
+    }
+
+    setClearingListeningHistory(true);
+    setError("");
+    setNotice("");
+    try {
+      await userRequest(
+        apiUrl,
+        token,
+        "/api/user/listening-history",
+        { method: "DELETE" },
+      );
+      setListeningHistory([]);
+      setListeningHistoryTotal(0);
+      setListeningHistorySkip(0);
+      setNotice("Đã xóa toàn bộ lịch sử nghe.");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setClearingListeningHistory(false);
     }
   }
 
@@ -1194,7 +1261,22 @@ export default function UserDemo({ apiUrl }) {
                   <p className="eyebrow">LISTENING HISTORY</p>
                   <h2>Lịch sử nghe</h2>
                 </div>
-                <span className="muted-count">{listeningHistoryTotal} lượt nghe</span>
+                <div className="user-history-actions">
+                  <span className="muted-count">{listeningHistoryTotal} lượt nghe</span>
+                  <button
+                    className="text-button danger-text"
+                    disabled={
+                      listeningHistoryTotal === 0
+                      || listeningHistoryLoading
+                      || clearingListeningHistory
+                      || deletingHistoryId !== null
+                    }
+                    onClick={clearListeningHistory}
+                    type="button"
+                  >
+                    {clearingListeningHistory ? "Đang xóa..." : "Xóa tất cả"}
+                  </button>
+                </div>
               </div>
               <ul className="user-demo-list">
                 {listeningHistory.map((item) => (
@@ -1213,25 +1295,43 @@ export default function UserDemo({ apiUrl }) {
                         {formatDate(item.ListenedAt)}
                       </small>
                     </span>
-                    <button
-                      className="text-button"
-                      disabled={
-                        !item.PlaceId
-                        || !item.AudioId
-                        || replayingHistoryId === item.ListeningHistoryId
-                      }
-                      onClick={() => replayHistoryItem(item)}
-                      title={
-                        item.PlaceId && item.AudioId
-                          ? "Phát lại audio này"
-                          : "Lượt nghe này không còn audio để phát"
-                      }
-                      type="button"
-                    >
-                      {replayingHistoryId === item.ListeningHistoryId
-                        ? "Đang tải..."
-                        : "Nghe lại"}
-                    </button>
+                    <div className="user-history-row-actions">
+                      <button
+                        className="text-button"
+                        disabled={
+                          !item.PlaceId
+                          || !item.AudioId
+                          || replayingHistoryId === item.ListeningHistoryId
+                          || deletingHistoryId !== null
+                          || clearingListeningHistory
+                        }
+                        onClick={() => replayHistoryItem(item)}
+                        title={
+                          item.PlaceId && item.AudioId
+                            ? "Phát lại audio này"
+                            : "Lượt nghe này không còn audio để phát"
+                        }
+                        type="button"
+                      >
+                        {replayingHistoryId === item.ListeningHistoryId
+                          ? "Đang tải..."
+                          : "Nghe lại"}
+                      </button>
+                      <button
+                        className="text-button danger-text"
+                        disabled={
+                          deletingHistoryId !== null
+                          || clearingListeningHistory
+                          || listeningHistoryLoading
+                        }
+                        onClick={() => deleteListeningHistoryEntry(item)}
+                        type="button"
+                      >
+                        {deletingHistoryId === item.ListeningHistoryId
+                          ? "Đang xóa..."
+                          : "Xóa"}
+                      </button>
+                    </div>
                   </li>
                 ))}
                 {listeningHistoryLoading ? (

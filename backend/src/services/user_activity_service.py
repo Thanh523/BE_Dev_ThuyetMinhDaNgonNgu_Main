@@ -92,6 +92,29 @@ class UserActivityService:
             raise self._unavailable("Listening history is temporarily unavailable.") from error
         return {"items": items, "total": total, "skip": skip, "limit": limit}
 
+    async def delete_listening_history_entry(
+        self,
+        user_id: str,
+        history_id: str,
+    ) -> bool:
+        try:
+            return await self.repository.delete_listening_history_entry(
+                user_id,
+                history_id,
+            )
+        except PyMongoError as error:
+            raise self._unavailable(
+                "Listening history entry could not be removed.",
+            ) from error
+
+    async def clear_listening_history(self, user_id: str) -> int:
+        try:
+            return await self.repository.clear_listening_history(user_id)
+        except PyMongoError as error:
+            raise self._unavailable(
+                "Listening history could not be cleared.",
+            ) from error
+
     async def record_listening(
         self,
         user_id: str,

@@ -1113,6 +1113,22 @@ input::placeholder {
   color: var(--muted);
 }
 
+.user-history-actions,
+.user-history-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-history-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.user-history-row-actions {
+  flex: 0 0 auto;
+}
+
 .user-demo-session {
   align-items: flex-start !important;
 }

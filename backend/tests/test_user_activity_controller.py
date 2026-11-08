@@ -2,6 +2,8 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from src.controllers.user_activity_controller import (
+    clear_listening_history,
+    delete_listening_history_entry,
     get_user_place_details,
     list_user_categories,
     list_user_places,
@@ -80,6 +82,44 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
 
         service.get_place_details.assert_awaited_once_with(1)
         self.assertEqual(details, result)
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_delete_history_entry_uses_authenticated_user(
+        self,
+        service_factory,
+    ):
+        service = Mock()
+        service.delete_listening_history_entry = AsyncMock(return_value=True)
+        service_factory.return_value = service
+
+        response = await delete_listening_history_entry(
+            history_id="history-1",
+            database=object(),
+            claims={"UserId": "user-1"},
+        )
+
+        service.delete_listening_history_entry.assert_awaited_once_with(
+            "user-1",
+            "history-1",
+        )
+        self.assertEqual(204, response.status_code)
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_clear_history_uses_authenticated_user(
+        self,
+        service_factory,
+    ):
+        service = Mock()
+        service.clear_listening_history = AsyncMock(return_value=4)
+        service_factory.return_value = service
+
+        response = await clear_listening_history(
+            database=object(),
+            claims={"UserId": "user-1"},
+        )
+
+        service.clear_listening_history.assert_awaited_once_with("user-1")
+        self.assertEqual(204, response.status_code)
 
 
 if __name__ == "__main__":

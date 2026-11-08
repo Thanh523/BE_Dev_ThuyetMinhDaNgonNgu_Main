@@ -240,6 +240,20 @@ class UserActivityRepository:
 
         return items, total
 
+    async def delete_listening_history_entry(
+        self,
+        user_id: str,
+        history_id: str,
+    ) -> bool:
+        result = await self.listening_history.delete_one(
+            {"UserId": user_id, "ListeningHistoryId": history_id},
+        )
+        return result.deleted_count > 0
+
+    async def clear_listening_history(self, user_id: str) -> int:
+        result = await self.listening_history.delete_many({"UserId": user_id})
+        return result.deleted_count
+
     async def record_listening(
         self,
         user_id: str,

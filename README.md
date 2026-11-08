@@ -121,7 +121,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `GET` | `/api/user/saved-places` | Page through the authenticated user's saved places |
 | `POST` | `/api/user/saved-places/{place_id}` | Save a visible place |
 | `DELETE` | `/api/user/saved-places/{place_id}` | Remove a saved place |
-| `GET` | `/api/user/listening-history` | Page through the authenticated user's listening history |
+| `GET` | `/api/user/listening-history` | Page through listening history with audio title, language, and place name |
 | `POST` | `/api/user/listening-history` | Record a completed or partial audio play |
 | `POST` | `/api/user/sessions` | Start a visitor session |
 | `GET` | `/api/user/sessions` | Page through the authenticated user's sessions |

@@ -188,10 +188,57 @@ class UserActivityRepository:
             .skip(skip)
             .limit(limit)
         )
-        return (
-            await cursor.to_list(length=limit),
-            await self.listening_history.count_documents(query),
-        )
+        items = await cursor.to_list(length=limit)
+        total = await self.listening_history.count_documents(query)
+
+        # Ghép thông tin audio cho đúng trang hiện tại, vẫn giữ history nếu audio bị xóa.
+        audio_ids = {
+            item["AudioId"]
+            for item in items
+            if item.get("AudioId") is not None
+        }
+        if audio_ids:
+            audios = await self.audios.find(
+                {"AudioId": {"$in": list(audio_ids)}},
+                {
+                    "_id": 0,
+                    "AudioId": 1,
+                    "PlaceId": 1,
+                    "Title": 1,
+                    "Language": 1,
+                },
+            ).to_list(length=len(audio_ids))
+            audios_by_id = {str(audio["AudioId"]): audio for audio in audios}
+            place_ids = {
+                audio["PlaceId"]
+                for audio in audios
+                if audio.get("PlaceId") is not None
+            }
+            place_query_ids = place_ids | {str(place_id) for place_id in place_ids}
+            places = []
+            if place_query_ids:
+                places = await self.places.find(
+                    {"PlaceId": {"$in": list(place_query_ids)}},
+                    {"_id": 0, "PlaceId": 1, "PlaceName": 1},
+                ).to_list(length=len(place_query_ids))
+            places_by_id = {
+                str(place["PlaceId"]): place.get("PlaceName")
+                for place in places
+            }
+
+            for item in items:
+                audio = audios_by_id.get(str(item.get("AudioId")))
+                if not audio:
+                    item["AudioTitle"] = None
+                    item["Language"] = None
+                    item["PlaceName"] = None
+                    continue
+                item["AudioTitle"] = audio.get("Title")
+                item["Language"] = audio.get("Language")
+                item["PlaceId"] = audio.get("PlaceId")
+                item["PlaceName"] = places_by_id.get(str(audio.get("PlaceId")))
+
+        return items, total
 
     async def record_listening(
         self,

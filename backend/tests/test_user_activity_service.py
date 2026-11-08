@@ -84,6 +84,65 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(["Museum", "Gallery"], [item["PlaceName"] for item in items])
         places.find.assert_called_once()
 
+    async def test_listening_history_includes_audio_and_place_details(self):
+        history_collection = Mock()
+        history_collection.find.return_value = FakeMongoCursor([
+            {
+                "ListeningHistoryId": "history-1",
+                "AudioId": "audio-1",
+                "ListenedAt": None,
+                "PlayedSeconds": 36,
+                "IsCompleted": True,
+            },
+        ])
+        history_collection.count_documents = AsyncMock(return_value=1)
+        audio_collection = Mock()
+        audio_collection.find.return_value = FakeMongoCursor([
+            {
+                "AudioId": "audio-1",
+                "PlaceId": 15,
+                "Title": "Museum introduction",
+                "Language": "vi",
+            },
+        ])
+        place_collection = Mock()
+        place_collection.find.return_value = FakeMongoCursor([
+            {"PlaceId": "15", "PlaceName": "City Museum"},
+        ])
+        collections = {
+            "SavedPlaces": Mock(),
+            "ListeningHistory": history_collection,
+            "VisitorSessions": Mock(),
+            "UsageEvents": Mock(),
+            "Places": place_collection,
+            "Categories": Mock(),
+            "PlaceImages": Mock(),
+            "PlaceAudios": audio_collection,
+            "Narrations": Mock(),
+        }
+        database = MagicMock()
+        database.__getitem__.side_effect = lambda name: collections[name]
+        settings = SimpleNamespace(
+            saved_places_collection="SavedPlaces",
+            listening_history_collection="ListeningHistory",
+            visitor_sessions_collection="VisitorSessions",
+            usage_events_collection="UsageEvents",
+            places_collection="Places",
+            categories_collection="Categories",
+            place_images_collection="PlaceImages",
+            audio_collection="PlaceAudios",
+            narrations_collection="Narrations",
+        )
+        repository = UserActivityRepository(database, settings)
+
+        items, total = await repository.list_listening_history("user-1", 10, 10)
+
+        self.assertEqual(1, total)
+        self.assertEqual("Museum introduction", items[0]["AudioTitle"])
+        self.assertEqual("vi", items[0]["Language"])
+        self.assertEqual("City Museum", items[0]["PlaceName"])
+        self.assertEqual(15, items[0]["PlaceId"])
+
     async def test_saving_place_is_scoped_to_authenticated_user(self):
         self.repository.get_visible_place = AsyncMock(return_value={"PlaceId": 15})
         self.repository.save_place = AsyncMock()

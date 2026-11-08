@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
-const PAGE_LIMIT = 20;
 const PLACE_PAGE_LIMIT = 12;
 const SAVED_PLACES_PAGE_LIMIT = 10;
+const LISTENING_HISTORY_PAGE_LIMIT = 10;
 
 // Giữ mã HTTP để giao diện phân biệt lỗi dữ liệu với audio đã bị xóa/ngừng hoạt động.
 class ApiRequestError extends Error {
@@ -97,24 +97,60 @@ export default function UserDemo({ apiUrl }) {
   const [savedPlacesSkip, setSavedPlacesSkip] = useState(0);
   const [savedPlacesLoading, setSavedPlacesLoading] = useState(false);
   const [listeningHistory, setListeningHistory] = useState([]);
+  const [listeningHistoryTotal, setListeningHistoryTotal] = useState(0);
+  const [listeningHistorySkip, setListeningHistorySkip] = useState(0);
+  const [listeningHistoryLoading, setListeningHistoryLoading] = useState(false);
+  const [listeningHistoryRefresh, setListeningHistoryRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   // Tải dữ liệu cá nhân bằng token user; API tự giới hạn dữ liệu theo tài khoản.
   const refreshActivity = useCallback(async (activeToken) => {
-    const [currentProfile, history] = await Promise.all([
-      userRequest(apiUrl, activeToken, "/api/user/auth/me"),
-      userRequest(
-        apiUrl,
-        activeToken,
-        `/api/user/listening-history?skip=0&limit=${PAGE_LIMIT}`,
-      ),
-    ]);
+    const currentProfile = await userRequest(apiUrl, activeToken, "/api/user/auth/me");
     setProfile(currentProfile);
     setProfileForm({ full_name: currentProfile.FullName });
-    setListeningHistory(history.items);
   }, [apiUrl]);
+
+  const loadListeningHistory = useCallback((activeToken, skip) => userRequest(
+    apiUrl,
+    activeToken,
+    `/api/user/listening-history?skip=${skip}&limit=${LISTENING_HISTORY_PAGE_LIMIT}`,
+  ), [apiUrl]);
+
+  // Tải riêng trang lịch sử để danh sách dài không bị giới hạn ở 20 lượt đầu.
+  useEffect(() => {
+    if (!token) {
+      setListeningHistory([]);
+      setListeningHistoryTotal(0);
+      setListeningHistorySkip(0);
+      return undefined;
+    }
+
+    let active = true;
+    setListeningHistoryLoading(true);
+    loadListeningHistory(token, listeningHistorySkip)
+      .then((history) => {
+        if (active) {
+          setListeningHistory(history.items);
+          setListeningHistoryTotal(history.total);
+        }
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setListeningHistoryLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token, listeningHistorySkip, listeningHistoryRefresh, loadListeningHistory]);
 
   const loadSavedPlaces = useCallback(async (activeToken, skip = savedPlacesSkip) => {
     return userRequest(
@@ -251,6 +287,8 @@ export default function UserDemo({ apiUrl }) {
     setSavedPlacesTotal(0);
     setSavedPlacesSkip(0);
     setListeningHistory([]);
+    setListeningHistoryTotal(0);
+    setListeningHistorySkip(0);
     setPlaces([]);
     setPlaceCategories([]);
     setSelectedCategoryId("");
@@ -401,6 +439,8 @@ export default function UserDemo({ apiUrl }) {
         }),
       });
       await refreshActivity(token);
+      setListeningHistorySkip(0);
+      setListeningHistoryRefresh((current) => current + 1);
       setNotice(
         completed
           ? `Đã nghe xong "${audio.Title}", lịch sử đã được lưu.`
@@ -1084,20 +1124,69 @@ export default function UserDemo({ apiUrl }) {
                   <p className="eyebrow">LISTENING HISTORY</p>
                   <h2>Lịch sử nghe</h2>
                 </div>
-                <span className="muted-count">{listeningHistory.length} lượt gần nhất</span>
+                <span className="muted-count">{listeningHistoryTotal} lượt nghe</span>
               </div>
               <ul className="user-demo-list">
                 {listeningHistory.map((item) => (
                   <li key={item.ListeningHistoryId}>
                     <span>
-                      Audio {item.AudioId} · {item.PlayedSeconds}s ·{" "}
-                      {item.IsCompleted ? "Hoàn thành" : "Chưa hoàn thành"} ·{" "}
-                      {formatDate(item.ListenedAt)}
+                      <strong>
+                        {item.AudioTitle ?? `Audio ${item.AudioId ?? "không còn tồn tại"}`}
+                      </strong>
+                      <small>
+                        {item.PlaceName ?? "Địa điểm không còn tồn tại"}
+                        {item.Language ? ` · ${item.Language}` : ""}
+                      </small>
+                      <small>
+                        Đã nghe {item.PlayedSeconds}s ·{" "}
+                        {item.IsCompleted ? "Hoàn thành" : "Chưa hoàn thành"} ·{" "}
+                        {formatDate(item.ListenedAt)}
+                      </small>
                     </span>
                   </li>
                 ))}
-                {listeningHistory.length === 0 && <li className="muted-row">Chưa có lịch sử nghe.</li>}
+                {listeningHistoryLoading ? (
+                  <li className="muted-row">Đang tải lịch sử nghe...</li>
+                ) : listeningHistory.length === 0 ? (
+                  <li className="muted-row">Chưa có lịch sử nghe.</li>
+                ) : null}
               </ul>
+              {listeningHistoryTotal > LISTENING_HISTORY_PAGE_LIMIT && (
+                <div className="user-place-pagination">
+                  <button
+                    className="button button-outline"
+                    disabled={listeningHistoryLoading || listeningHistorySkip === 0}
+                    onClick={() => setListeningHistorySkip((current) => (
+                      Math.max(0, current - LISTENING_HISTORY_PAGE_LIMIT)
+                    ))}
+                    type="button"
+                  >
+                    Trang trước
+                  </button>
+                  <span>
+                    Trang {Math.floor(
+                      listeningHistorySkip / LISTENING_HISTORY_PAGE_LIMIT,
+                    ) + 1} /{" "}
+                    {Math.ceil(
+                      listeningHistoryTotal / LISTENING_HISTORY_PAGE_LIMIT,
+                    )}
+                  </span>
+                  <button
+                    className="button button-outline"
+                    disabled={
+                      listeningHistoryLoading
+                      || listeningHistorySkip + LISTENING_HISTORY_PAGE_LIMIT
+                        >= listeningHistoryTotal
+                    }
+                    onClick={() => setListeningHistorySkip((current) => (
+                      current + LISTENING_HISTORY_PAGE_LIMIT
+                    ))}
+                    type="button"
+                  >
+                    Trang sau
+                  </button>
+                </div>
+              )}
             </section>
           </section>
         </>

@@ -87,6 +87,7 @@ class UserAuthRepository:
         current_hash: str,
         new_hash: str,
     ) -> bool:
+        # Hash cũ trong điều kiện tránh ghi đè một lần đổi mật khẩu diễn ra cùng lúc.
         result = await self.users.update_one(
             {"$and": [
                 self._user_id_query(user_id),

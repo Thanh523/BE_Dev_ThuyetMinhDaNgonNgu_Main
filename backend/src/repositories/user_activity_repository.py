@@ -12,15 +12,48 @@ class UserActivityRepository:
         self.visitor_sessions = database[settings.visitor_sessions_collection]
         self.usage_events = database[settings.usage_events_collection]
         self.places = database[settings.places_collection]
+        self.categories = database[settings.categories_collection]
+        self.images = database[settings.place_images_collection]
         self.audios = database[settings.audio_collection]
         self.narrations = database[settings.narrations_collection]
 
     async def get_visible_place(self, place_id: int) -> dict | None:
-        # Không cho tạo bookmark trỏ tới địa điểm ẩn hoặc không tồn tại.
+        # Chỉ công khai dữ liệu địa điểm đang hiển thị trong trải nghiệm user.
         return await self.places.find_one(
             {"PlaceId": place_id, "IsVisible": {"$ne": False}},
-            {"_id": 0, "PlaceId": 1},
+            {
+                "_id": 0,
+                "PlaceId": 1,
+                "PlaceName": 1,
+                "Slug": 1,
+                "Address": 1,
+                "CategoryId": 1,
+                "Description": 1,
+            },
         )
+
+    async def get_place_category(self, category_id: int | None) -> dict | None:
+        if category_id is None:
+            return None
+        return await self.categories.find_one(
+            {"CategoryId": category_id},
+            {"_id": 0, "CategoryId": 1, "CategoryName": 1, "Description": 1},
+        )
+
+    async def list_place_images(self, place_id: int) -> list[dict]:
+        # Một số bản ghi cũ lưu PlaceId dạng chuỗi, nên truy vấn cả chuỗi và số.
+        cursor = self.images.find(
+            {"PlaceId": {"$in": [place_id, str(place_id)]}},
+            {
+                "_id": 0,
+                "ImageId": 1,
+                "PlaceId": 1,
+                "FileUrl": 1,
+                "SortOrder": 1,
+                "Caption": 1,
+            },
+        ).sort([("SortOrder", 1), ("CreatedAt", 1), ("ImageId", 1)])
+        return await cursor.to_list(length=None)
 
     async def list_active_audios(self, place_id: int) -> list[dict]:
         cursor = (

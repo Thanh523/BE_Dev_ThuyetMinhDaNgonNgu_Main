@@ -1,7 +1,10 @@
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from src.controllers.user_activity_controller import list_user_places
+from src.controllers.user_activity_controller import (
+    get_user_place_details,
+    list_user_places,
+)
 
 
 class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
@@ -33,6 +36,30 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             {"items": [{"PlaceId": 1}], "total": 1, "skip": 12, "limit": 12},
             result,
         )
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_user_place_details_uses_user_activity_service(
+        self,
+        service_factory,
+    ):
+        service = Mock()
+        details = {
+            "place": {"PlaceId": 1},
+            "category": None,
+            "images": [],
+            "audios": [],
+        }
+        service.get_place_details = AsyncMock(return_value=details)
+        service_factory.return_value = service
+
+        result = await get_user_place_details(
+            place_id=1,
+            database=object(),
+            claims={"UserId": "user-1"},
+        )
+
+        service.get_place_details.assert_awaited_once_with(1)
+        self.assertEqual(details, result)
 
 
 if __name__ == "__main__":

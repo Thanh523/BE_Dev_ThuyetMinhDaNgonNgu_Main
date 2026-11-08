@@ -84,9 +84,9 @@ export default function UserDemo({ apiUrl }) {
   const [placesSkip, setPlacesSkip] = useState(0);
   const [placesTotal, setPlacesTotal] = useState(0);
   const [placesLoading, setPlacesLoading] = useState(false);
+  const [placeDetails, setPlaceDetails] = useState(null);
+  const [loadingPlaceDetailsId, setLoadingPlaceDetailsId] = useState(null);
   const [audiosByPlace, setAudiosByPlace] = useState({});
-  const [selectedAudioPlaceId, setSelectedAudioPlaceId] = useState(null);
-  const [loadingAudioPlaceId, setLoadingAudioPlaceId] = useState(null);
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [listeningHistory, setListeningHistory] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -203,9 +203,9 @@ export default function UserDemo({ apiUrl }) {
     setPlaces([]);
     setPlacesTotal(0);
     setPlacesSkip(0);
+    setPlaceDetails(null);
+    setLoadingPlaceDetailsId(null);
     setAudiosByPlace({});
-    setSelectedAudioPlaceId(null);
-    setLoadingAudioPlaceId(null);
     setNotice("Đã đăng xuất user.");
     setError("");
   }
@@ -261,6 +261,7 @@ export default function UserDemo({ apiUrl }) {
 
   async function changePassword(event) {
     event.preventDefault();
+    // So khớp ngay trên giao diện để tránh gửi mật khẩu mới không khớp lên server.
     if (passwordForm.new_password !== passwordForm.confirm_password) {
       setError("Mật khẩu mới nhập lại không khớp.");
       setNotice("");
@@ -287,31 +288,26 @@ export default function UserDemo({ apiUrl }) {
     );
   }
 
-  async function togglePlaceAudios(place) {
-    if (selectedAudioPlaceId === place.PlaceId) {
-      setSelectedAudioPlaceId(null);
-      return;
-    }
-
-    // Lấy danh sách hiện hành để không giữ AudioId của tệp đã bị thay hoặc xóa.
-    setSelectedAudioPlaceId(place.PlaceId);
-    setLoadingAudioPlaceId(place.PlaceId);
+  async function openPlaceDetails(place) {
+    setLoadingPlaceDetailsId(place.PlaceId);
     setError("");
+    setNotice("");
     try {
-      const audios = await userRequest(
+      // Lấy một bộ dữ liệu chi tiết đã lọc visible từ API user, không gọi API admin.
+      const details = await userRequest(
         apiUrl,
         token,
-        `/api/user/places/${place.PlaceId}/audios`,
+        `/api/user/places/${place.PlaceId}`,
       );
+      setPlaceDetails(details);
       setAudiosByPlace((current) => ({
         ...current,
-        [place.PlaceId]: audios,
+        [place.PlaceId]: details.audios,
       }));
     } catch (requestError) {
-      setSelectedAudioPlaceId(null);
       setError(requestError.message);
     } finally {
-      setLoadingAudioPlaceId(null);
+      setLoadingPlaceDetailsId(null);
     }
   }
 
@@ -695,7 +691,131 @@ export default function UserDemo({ apiUrl }) {
                 Tìm kiếm
               </button>
             </form>
-            {placesLoading ? (
+            {placeDetails ? (
+              <article className="user-place-detail">
+                {/* Khi đã chọn địa điểm, thay danh sách bằng thông tin đầy đủ và nút quay lại. */}
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">
+                      {placeDetails.category?.CategoryName ?? "ĐỊA ĐIỂM"}
+                    </p>
+                    <h2>{placeDetails.place.PlaceName}</h2>
+                    <p className="subtitle">{placeDetails.place.Address}</p>
+                  </div>
+                  <button
+                    className="button button-outline"
+                    onClick={() => setPlaceDetails(null)}
+                    type="button"
+                  >
+                    Quay lại danh sách
+                  </button>
+                </div>
+                {placeDetails.category?.Description && (
+                  <p className="user-place-category-description">
+                    {placeDetails.category.Description}
+                  </p>
+                )}
+                {placeDetails.place.Description && (
+                  <p className="user-place-description">
+                    {placeDetails.place.Description}
+                  </p>
+                )}
+                {placeDetails.images.length > 0 ? (
+                  <div className="user-place-image-grid">
+                    {placeDetails.images.map((image) => (
+                      <figure key={image.ImageId}>
+                        <img
+                          alt={image.Caption || placeDetails.place.PlaceName}
+                          loading="lazy"
+                          onError={(event) => {
+                            // Ẩn ảnh lỗi để URL hỏng không làm vỡ bố cục chi tiết.
+                            event.currentTarget.hidden = true;
+                          }}
+                          src={new URL(
+                            image.FileUrl,
+                            `${apiUrl.replace(/\/+$/, "")}/`,
+                          ).toString()}
+                        />
+                        {image.Caption && <figcaption>{image.Caption}</figcaption>}
+                      </figure>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="user-place-empty">Địa điểm chưa có hình ảnh.</p>
+                )}
+                <div className="user-place-detail-actions">
+                  <button
+                    aria-pressed={savedPlaces.some(
+                      (item) => Number(item.PlaceId)
+                        === Number(placeDetails.place.PlaceId),
+                    )}
+                    className={`button ${
+                      savedPlaces.some(
+                        (item) => Number(item.PlaceId)
+                          === Number(placeDetails.place.PlaceId),
+                      )
+                        ? "button-outline"
+                        : ""
+                    }`}
+                    disabled={busy}
+                    onClick={() => toggleSavedPlace(placeDetails.place)}
+                    type="button"
+                  >
+                    {savedPlaces.some(
+                      (item) => Number(item.PlaceId)
+                        === Number(placeDetails.place.PlaceId),
+                    )
+                      ? "Đã lưu · Bỏ lưu"
+                      : "Lưu địa điểm"}
+                  </button>
+                </div>
+                <div className="user-place-detail-audios">
+                  <h3>Thuyết minh audio</h3>
+                  {(audiosByPlace[placeDetails.place.PlaceId] ?? []).length === 0 ? (
+                    <p>Địa điểm này chưa có audio thuyết minh.</p>
+                  ) : (
+                    audiosByPlace[placeDetails.place.PlaceId].map((audio) => (
+                      <div className="user-place-audio" key={audio.AudioId}>
+                        <div>
+                          <strong>{audio.Title}</strong>
+                          <span>
+                            {audio.Language}
+                            {audio.DurationSeconds
+                              ? ` · ${audio.DurationSeconds} giây`
+                              : ""}
+                          </span>
+                        </div>
+                        <audio
+                          controls
+                          onEnded={(event) => recordAudioPlayback(
+                            audio,
+                            event.currentTarget,
+                            true,
+                          )}
+                          onPause={(event) => {
+                            if (!event.currentTarget.ended) {
+                              recordAudioPlayback(
+                                audio,
+                                event.currentTarget,
+                                false,
+                              );
+                            }
+                          }}
+                          onError={() => setError(
+                            `Không phát được audio "${audio.Title}".`,
+                          )}
+                          preload="none"
+                          src={new URL(
+                            audio.FileUrl,
+                            `${apiUrl.replace(/\/+$/, "")}/`,
+                          ).toString()}
+                        />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </article>
+            ) : placesLoading ? (
               <p className="user-place-empty">Đang tải địa điểm...</p>
             ) : places.length === 0 ? (
               <p className="user-place-empty">Không tìm thấy địa điểm phù hợp.</p>
@@ -723,71 +843,22 @@ export default function UserDemo({ apiUrl }) {
                           {isSaved ? "Đã lưu · Bỏ lưu" : "Lưu địa điểm"}
                         </button>
                         <button
-                          aria-expanded={selectedAudioPlaceId === place.PlaceId}
                           className="text-button"
-                          disabled={loadingAudioPlaceId === place.PlaceId}
-                          onClick={() => togglePlaceAudios(place)}
+                          disabled={loadingPlaceDetailsId === place.PlaceId}
+                          onClick={() => openPlaceDetails(place)}
                           type="button"
                         >
-                          {loadingAudioPlaceId === place.PlaceId
-                            ? "Đang tải audio..."
-                            : selectedAudioPlaceId === place.PlaceId
-                              ? "Ẩn thuyết minh"
-                              : "Nghe thuyết minh"}
+                          {loadingPlaceDetailsId === place.PlaceId
+                            ? "Đang tải chi tiết..."
+                            : "Xem chi tiết"}
                         </button>
                       </div>
-                      {selectedAudioPlaceId === place.PlaceId && (
-                        <div className="user-place-audios">
-                          {(audiosByPlace[place.PlaceId] ?? []).length === 0 ? (
-                            <p>Địa điểm này chưa có audio thuyết minh.</p>
-                          ) : (
-                            audiosByPlace[place.PlaceId].map((audio) => (
-                              <div className="user-place-audio" key={audio.AudioId}>
-                                <div>
-                                  <strong>{audio.Title}</strong>
-                                  <span>
-                                    {audio.Language}
-                                    {audio.DurationSeconds
-                                      ? ` · ${audio.DurationSeconds} giây`
-                                      : ""}
-                                  </span>
-                                </div>
-                                <audio
-                                  controls
-                                  onEnded={(event) => recordAudioPlayback(
-                                    audio,
-                                    event.currentTarget,
-                                    true,
-                                  )}
-                                  onPause={(event) => {
-                                    if (!event.currentTarget.ended) {
-                                      recordAudioPlayback(
-                                        audio,
-                                        event.currentTarget,
-                                        false,
-                                      );
-                                    }
-                                  }}
-                                  onError={() => setError(
-                                    `Không phát được audio "${audio.Title}".`,
-                                  )}
-                                  preload="none"
-                                  src={new URL(
-                                    audio.FileUrl,
-                                    `${apiUrl.replace(/\/+$/, "")}/`,
-                                  ).toString()}
-                                />
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )}
                     </article>
                   );
                 })}
               </div>
             )}
-            {placesTotal > PLACE_PAGE_LIMIT && (
+            {!placeDetails && placesTotal > PLACE_PAGE_LIMIT && (
               <div className="user-place-pagination">
                 <button
                   className="button button-outline"

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 import uuid
 
@@ -38,6 +39,33 @@ class UserActivityService:
             return await self.repository.list_active_audios(place_id)
         except PyMongoError as error:
             raise self._unavailable("Place audio is temporarily unavailable.") from error
+
+    async def get_place_details(self, place_id: int) -> dict:
+        try:
+            # Kiểm tra visibility trước, tránh lộ ảnh/audio của địa điểm ẩn cho user.
+            place = await self.repository.get_visible_place(place_id)
+            if not place:
+                raise HTTPException(status_code=404, detail="Place was not found.")
+            category, images, audios = await self._place_detail_data(place)
+            return {
+                "place": place,
+                "category": category,
+                "images": images,
+                "audios": audios,
+            }
+        except PyMongoError as error:
+            raise self._unavailable(
+                "Place details are temporarily unavailable.",
+            ) from error
+
+    async def _place_detail_data(self, place: dict) -> tuple[dict | None, list[dict], list[dict]]:
+        # Các nguồn độc lập được lấy song song để trang chi tiết phản hồi nhanh hơn.
+        category, images, audios = await asyncio.gather(
+            self.repository.get_place_category(place.get("CategoryId")),
+            self.repository.list_place_images(int(place["PlaceId"])),
+            self.repository.list_active_audios(int(place["PlaceId"])),
+        )
+        return category, images, audios
 
     async def unsave_place(self, user_id: str, place_id: int) -> bool:
         try:

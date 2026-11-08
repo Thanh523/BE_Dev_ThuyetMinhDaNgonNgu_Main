@@ -142,6 +142,16 @@ async def list_user_place_audios(
     return await _service(database).list_place_audios(place_id)
 
 
+@router.get("/places/{place_id}")
+async def get_user_place_details(
+    place_id: int = Path(gt=0),
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> dict:
+    # Chi tiết chỉ gồm địa điểm đang hiển thị và nội dung được phép cho user.
+    return await _service(database).get_place_details(place_id)
+
+
 @router.post("/saved-places/{place_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def save_place(
     place_id: int = Path(gt=0),

@@ -53,6 +53,49 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(404, raised.exception.status_code)
         self.repository.list_active_audios.assert_not_awaited()
 
+    async def test_place_details_include_category_images_and_audio_for_visible_place(self):
+        place = {
+            "PlaceId": 15,
+            "PlaceName": "Museum",
+            "CategoryId": 2,
+        }
+        category = {"CategoryId": 2, "CategoryName": "Museum"}
+        images = [{"ImageId": "image-1", "FileUrl": "/image.jpg"}]
+        audios = [{"AudioId": "audio-1", "FileUrl": "/audio.mp3"}]
+        self.repository.get_visible_place = AsyncMock(return_value=place)
+        self.repository.get_place_category = AsyncMock(return_value=category)
+        self.repository.list_place_images = AsyncMock(return_value=images)
+        self.repository.list_active_audios = AsyncMock(return_value=audios)
+
+        result = await self.service.get_place_details(15)
+
+        self.assertEqual(
+            {
+                "place": place,
+                "category": category,
+                "images": images,
+                "audios": audios,
+            },
+            result,
+        )
+        self.repository.get_place_category.assert_awaited_once_with(2)
+        self.repository.list_place_images.assert_awaited_once_with(15)
+        self.repository.list_active_audios.assert_awaited_once_with(15)
+
+    async def test_place_details_reject_hidden_or_missing_place(self):
+        self.repository.get_visible_place = AsyncMock(return_value=None)
+        self.repository.get_place_category = AsyncMock()
+        self.repository.list_place_images = AsyncMock()
+        self.repository.list_active_audios = AsyncMock()
+
+        with self.assertRaises(HTTPException) as raised:
+            await self.service.get_place_details(15)
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.repository.get_place_category.assert_not_awaited()
+        self.repository.list_place_images.assert_not_awaited()
+        self.repository.list_active_audios.assert_not_awaited()
+
     async def test_recording_listening_rejects_unknown_audio(self):
         self.repository.get_active_audio = AsyncMock(return_value=None)
         self.repository.record_listening = AsyncMock()

@@ -189,6 +189,7 @@ class UserAuthService:
         if current_hash is None:
             raise HTTPException(status_code=404, detail="User account was not found.")
 
+        # Chỉ băm mật khẩu mới sau khi mật khẩu hiện tại đã được xác thực.
         try:
             password_hasher.verify(current_hash, current_password)
         except (VerifyMismatchError, VerificationError, InvalidHashError) as error:
@@ -198,6 +199,7 @@ class UserAuthService:
             ) from error
 
         try:
+            # Ghi có điều kiện trên hash cũ để phát hiện nếu mật khẩu vừa bị đổi đồng thời.
             changed = await self.repository.update_password_hash(
                 user_id,
                 current_hash,

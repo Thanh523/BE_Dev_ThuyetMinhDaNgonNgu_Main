@@ -115,6 +115,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `PATCH` | `/api/user/auth/me` | Update the authenticated user's full name |
 | `PATCH` | `/api/user/auth/me/password` | Change the authenticated user's password after verifying the current password |
 | `GET` | `/api/user/places` | Search and page through visible places |
+| `GET` | `/api/user/places/{place_id}` | Get visible place details, category, images, and active audio |
 | `GET` | `/api/user/places/{place_id}/audios` | List active audio for a visible place |
 | `GET` | `/api/user/saved-places` | Page through the authenticated user's saved places |
 | `POST` | `/api/user/saved-places/{place_id}` | Save a visible place |

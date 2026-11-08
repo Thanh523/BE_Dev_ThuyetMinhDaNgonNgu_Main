@@ -360,19 +360,19 @@ export default function UserDemo({ apiUrl }) {
       isSaved ? "Đã bỏ lưu địa điểm." : "Đã lưu địa điểm.",
       async () => {
         await refreshActivity(token);
-        const saved = await loadSavedPlaces(token, savedPlacesSkip);
+        let nextSkip = savedPlacesSkip;
+        let saved = await loadSavedPlaces(token, nextSkip);
         if (
           isSaved
           && saved.items.length === 0
-          && savedPlacesSkip > 0
+          && nextSkip > 0
         ) {
-          const previousSkip = Math.max(
-            0,
-            savedPlacesSkip - SAVED_PLACES_PAGE_LIMIT,
-          );
-          setSavedPlacesSkip(previousSkip);
-          await loadSavedPlaces(token, previousSkip);
+          nextSkip = Math.max(0, nextSkip - SAVED_PLACES_PAGE_LIMIT);
+          setSavedPlacesSkip(nextSkip);
+          saved = await loadSavedPlaces(token, nextSkip);
         }
+        setSavedPlaces(saved.items);
+        setSavedPlacesTotal(saved.total);
       },
     );
   }
@@ -620,7 +620,9 @@ export default function UserDemo({ apiUrl }) {
         if (nextSkip !== savedPlacesSkip) {
           setSavedPlacesSkip(nextSkip);
         }
-        await loadSavedPlaces(token, nextSkip);
+        const saved = await loadSavedPlaces(token, nextSkip);
+        setSavedPlaces(saved.items);
+        setSavedPlacesTotal(saved.total);
       },
     );
   }

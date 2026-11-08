@@ -1,8 +1,10 @@
+from datetime import datetime, timezone
 import unittest
 from unittest.mock import AsyncMock, Mock
 
 from fastapi import HTTPException
 
+from src.repositories.user_activity_repository import UserActivityRepository
 from src.services.user_activity_service import UserActivityService
 
 
@@ -154,6 +156,29 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertEqual(409, raised.exception.status_code)
+
+
+class UserActivityRepositoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_record_listening_response_omits_mongo_internal_id(self):
+        repository = object.__new__(UserActivityRepository)
+        repository.listening_history = Mock()
+
+        async def insert_entry(entry):
+            entry["_id"] = object()
+
+        repository.listening_history.insert_one = AsyncMock(side_effect=insert_entry)
+
+        result = await repository.record_listening(
+            "user-1",
+            "audio-1",
+            42,
+            False,
+            datetime.now(timezone.utc),
+        )
+
+        self.assertNotIn("_id", result)
+        self.assertNotIn("UserId", result)
+        self.assertEqual("audio-1", result["AudioId"])
 
 
 if __name__ == "__main__":

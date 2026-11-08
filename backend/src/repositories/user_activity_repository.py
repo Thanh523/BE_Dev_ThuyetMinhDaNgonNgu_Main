@@ -140,7 +140,11 @@ class UserActivityRepository:
             "IsCompleted": is_completed,
         }
         await self.listening_history.insert_one(entry)
-        return {key: value for key, value in entry.items() if key != "UserId"}
+        return {
+            key: value
+            for key, value in entry.items()
+            if key not in {"_id", "UserId"}
+        }
 
     async def create_session(self, user_id: str, now: datetime) -> dict:
         # SessionId khó đoán; LastSeenAt khởi tạo cùng thời điểm bắt đầu.

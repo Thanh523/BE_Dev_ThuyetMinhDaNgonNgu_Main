@@ -3,6 +3,16 @@ import { useCallback, useEffect, useState } from "react";
 const PAGE_LIMIT = 20;
 const PLACE_PAGE_LIMIT = 12;
 
+// Giữ mã HTTP để giao diện phân biệt lỗi dữ liệu với audio đã bị xóa/ngừng hoạt động.
+class ApiRequestError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
+// Tập trung xử lý header, response 204 và thông báo lỗi cho mọi API user.
 async function userRequest(apiUrl, token, path, options = {}) {
   const headers = new Headers(options.headers);
   if (token) {
@@ -33,10 +43,11 @@ async function userRequest(apiUrl, token, path, options = {}) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.detail;
-    throw new Error(
+    throw new ApiRequestError(
       typeof detail === "string"
         ? detail
         : `Yêu cầu thất bại (HTTP ${response.status}).`,
+      response.status,
     );
   }
   return payload;
@@ -133,6 +144,7 @@ export default function UserDemo({ apiUrl }) {
     ));
   }, [apiUrl]);
 
+  // Chỉ tìm khi submit; cờ active bỏ qua kết quả cũ nếu user đổi trang hoặc bộ lọc.
   useEffect(() => {
     if (!token) {
       setPlaces([]);
@@ -263,11 +275,8 @@ export default function UserDemo({ apiUrl }) {
       return;
     }
 
+    // Lấy danh sách hiện hành để không giữ AudioId của tệp đã bị thay hoặc xóa.
     setSelectedAudioPlaceId(place.PlaceId);
-    if (Object.hasOwn(audiosByPlace, place.PlaceId)) {
-      return;
-    }
-
     setLoadingAudioPlaceId(place.PlaceId);
     setError("");
     try {
@@ -299,6 +308,7 @@ export default function UserDemo({ apiUrl }) {
       return;
     }
 
+    // Tạm dừng lưu tiến độ; sự kiện ended lưu cùng thời lượng và đánh dấu hoàn tất.
     try {
       await userRequest(apiUrl, token, "/api/user/listening-history", {
         method: "POST",
@@ -316,7 +326,26 @@ export default function UserDemo({ apiUrl }) {
       );
       setError("");
     } catch (requestError) {
-      setError(requestError.message);
+      if (requestError.status === 404) {
+        try {
+          const currentAudios = await userRequest(
+            apiUrl,
+            token,
+            `/api/user/places/${audio.PlaceId}/audios`,
+          );
+          setAudiosByPlace((current) => ({
+            ...current,
+            [audio.PlaceId]: currentAudios,
+          }));
+          setError(
+            `Audio "${audio.Title}" không còn hoạt động; danh sách audio đã được làm mới.`,
+          );
+        } catch (refreshError) {
+          setError(refreshError.message);
+        }
+      } else {
+        setError(requestError.message);
+      }
     }
   }
 
@@ -379,6 +408,7 @@ export default function UserDemo({ apiUrl }) {
       setError("Hãy tạo hoặc chọn phiên đang hoạt động trước.");
       return;
     }
+    // Chỉ đổi ClientEventId sau khi ghi thành công, để gửi lại cùng ID không tạo event trùng.
     await runAction(
       () => userRequest(apiUrl, token, "/api/user/usage-events", {
         method: "POST",

@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
-from pymongo import ASCENDING, AsyncMongoClient
+from pymongo import ASCENDING, DESCENDING, AsyncMongoClient
 from pymongo.collation import Collation
 
 from src.config.settings import get_settings
@@ -80,6 +80,44 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await database[settings.user_accounts_collection].create_index(
             [("UserId", ASCENDING)],
             unique=True,
+        )
+        # Các index hỗ trợ uniqueness, chống event trùng và phân trang activity theo user.
+        await database[settings.saved_places_collection].create_index(
+            [("UserId", ASCENDING), ("PlaceId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.saved_places_collection].create_index(
+            [("SavedPlaceId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.saved_places_collection].create_index(
+            [("UserId", ASCENDING), ("SavedAt", DESCENDING)],
+        )
+        await database[settings.listening_history_collection].create_index(
+            [("ListeningHistoryId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.listening_history_collection].create_index(
+            [("UserId", ASCENDING), ("ListenedAt", DESCENDING)],
+        )
+        await database[settings.visitor_sessions_collection].create_index(
+            [("SessionId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.visitor_sessions_collection].create_index(
+            [("UserId", ASCENDING), ("StartedAt", DESCENDING)],
+        )
+        await database[settings.usage_events_collection].create_index(
+            [("EventId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.usage_events_collection].create_index(
+            [("ClientEventId", ASCENDING)],
+            unique=True,
+            partialFilterExpression={"ClientEventId": {"$type": "string"}},
+        )
+        await database[settings.usage_events_collection].create_index(
+            [("SessionId", ASCENDING), ("CreatedAt", DESCENDING)],
         )
         app.state.mongo_client = client
         app.state.database = database

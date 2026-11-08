@@ -121,10 +121,6 @@ class UserAccountRepository:
             },
         )
 
-    async def create(self, user: dict) -> None:
-        # Chèn tài khoản đã được service băm mật khẩu.
-        await self.users.insert_one(user)
-
     async def get_activity(self, user_id: str, limit: int) -> dict | None:
         # Lấy profile an toàn trước; user không tồn tại thì không truy vấn lịch sử.
         user = await self.users.find_one(
@@ -189,6 +185,7 @@ class UserAccountRepository:
                 "_id": 0,
                 "SessionId": 1,
                 "StartedAt": 1,
+                "LastSeenAt": 1,
                 "LastReportedAt": 1,
                 "EndedAt": 1,
             },
@@ -200,6 +197,39 @@ class UserAccountRepository:
         visitor_sessions_total = await self.visitor_sessions.count_documents(
             related_query,
         )
+        session_values = [
+            session["SessionId"]
+            for session in await self.visitor_sessions.find(
+                related_query,
+                {"_id": 0, "SessionId": 1},
+            ).to_list(length=None)
+            if "SessionId" in session
+        ]
+        usage_events = []
+        usage_events_total = 0
+        if session_values:
+            usage_query = {"SessionId": {"$in": session_values}}
+            usage_events_cursor = self.usage_events.find(
+                usage_query,
+                {
+                    "_id": 0,
+                    "EventId": 1,
+                    "ClientEventId": 1,
+                    "SessionId": 1,
+                    "NarrationId": 1,
+                    "AudioId": 1,
+                    "EventType": 1,
+                    "CreatedAt": 1,
+                },
+            )
+            usage_events = await usage_events_cursor.sort(
+                "CreatedAt",
+                -1,
+            ).limit(limit).to_list(length=limit)
+            usage_events_total = await self.usage_events.count_documents(usage_query)
+        for session in visitor_sessions:
+            if "LastSeenAt" not in session and "LastReportedAt" in session:
+                session["LastSeenAt"] = session["LastReportedAt"]
 
         return {
             "user": user,
@@ -209,6 +239,8 @@ class UserAccountRepository:
             "listening_history_total": listening_history_total,
             "visitor_sessions": visitor_sessions,
             "visitor_sessions_total": visitor_sessions_total,
+            "usage_events": usage_events,
+            "usage_events_total": usage_events_total,
         }
 
     async def delete_if_unrelated(self, user_id: str) -> dict | None:

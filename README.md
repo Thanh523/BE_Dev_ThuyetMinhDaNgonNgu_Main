@@ -44,7 +44,8 @@ Generate a secret locally with
 `python -c "import secrets; print(secrets.token_urlsafe(48))"` and put the
 result in `JWT_KEY`; do not share or commit it. The built-in admin login signs
 JWTs using `JWT_ALGORITHM` (HS256 by default) that expire after 8 hours. For
-HS256, the secret must be at least 32 bytes. No public registration is provided.
+HS256, the secret must be at least 32 bytes. User registration and login use
+the same JWT key but issue user-role tokens distinct from admin tokens.
 The application loads `atlas-credentials.env` automatically; existing process
 environment variables take precedence. From the `backend` directory, install
 dependencies, create the first admin, and start the API:
@@ -104,11 +105,31 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
 | `DELETE` | `/api/admin/categories/{category_id}` | Delete an unused category |
 | `GET` | `/api/admin/users` | Search and page user accounts (never returns password hashes) |
-| `POST` | `/api/admin/users` | Temporarily create test users from admin |
 | `PATCH` | `/api/admin/users/{user_id}` | Update a user's name and email |
 | `PATCH` | `/api/admin/users/{user_id}/status` | Activate or deactivate a user account |
 | `DELETE` | `/api/admin/users/{user_id}` | Soft-delete a user when no related records exist |
-| `GET` | `/api/admin/users/{user_id}/activity` | View recent saved places, listening history, and visitor sessions |
+| `GET` | `/api/admin/users/{user_id}/activity` | View saved places, listening history, visitor sessions, and usage events |
+| `POST` | `/api/user/auth/register` | Register a user account (email is not verified by email) |
+| `POST` | `/api/user/auth/login` | Sign in with email/password and receive a user JWT |
+| `GET` | `/api/user/auth/me` | Get the authenticated user's profile |
+| `PATCH` | `/api/user/auth/me` | Update the authenticated user's full name |
+| `PATCH` | `/api/user/auth/me/password` | Change the authenticated user's password after verifying the current password |
+| `GET` | `/api/user/places` | Search and page through visible places |
+| `GET` | `/api/user/categories` | List categories used by visible places |
+| `GET` | `/api/user/places/{place_id}` | Get visible place details, category, images, and active audio |
+| `GET` | `/api/user/places/{place_id}/audios` | List active audio for a visible place |
+| `GET` | `/api/user/saved-places` | Page through the authenticated user's saved places |
+| `POST` | `/api/user/saved-places/{place_id}` | Save a visible place |
+| `DELETE` | `/api/user/saved-places/{place_id}` | Remove a saved place |
+| `GET` | `/api/user/listening-history` | Page through listening history with audio title, language, and place name |
+| `DELETE` | `/api/user/listening-history/{history_id}` | Remove one listening-history entry owned by the authenticated user |
+| `DELETE` | `/api/user/listening-history` | Clear the authenticated user's listening history |
+| `POST` | `/api/user/listening-history` | Record a completed or partial audio play |
+| `POST` | `/api/user/sessions` | Start a visitor session |
+| `GET` | `/api/user/sessions` | Page through the authenticated user's sessions |
+| `PATCH` | `/api/user/sessions/{session_id}` | Update session activity or end the session |
+| `POST` | `/api/user/usage-events` | Record an idempotent usage event for an owned session |
+| `GET` | `/api/user/usage-events` | Page through events from the authenticated user's sessions |
 | `GET` | `/api/admin/places/{place_id}/audios` | List a place's audio by language |
 | `POST` | `/api/admin/places/{place_id}/audios` | Translate text and generate an MP3 narration |
 | `POST` | `/api/admin/places/{place_id}/audios/upload` | Upload an audio file with multipart fields `file`, `language`, and optional title/voice |
@@ -117,11 +138,14 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `DELETE` | `/api/admin/audios/{audio_id}` | Delete audio metadata and its stored file |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and
-`limit` query parameters. User management endpoints require an admin token;
-create, profile, status, and delete operations are recorded in `AdminActivityLogs`.
-The admin create-user endpoint is temporary for testing management features
-and should be removed when self-service registration is implemented. Test
-passwords must be 12-128 characters and are stored only as an Argon2 hash.
+`limit` query parameters. Admin user-management endpoints require an admin token;
+profile, status, and delete operations are recorded in `AdminActivityLogs`.
+Self-service registration creates an active account immediately; no email
+verification or password-reset email is implemented. Passwords must be 12-128
+characters and are stored only as an Argon2 hash. User login requires a
+configured `JWT_KEY` (at least 32 bytes for HS256) and returns an 8-hour JWT.
+User tokens are distinct from admin tokens; authenticated user endpoints derive
+`UserId` from the token and reject inactive or soft-deleted accounts.
 User deletion is rejected while records exist in `SavedPlaces`,
 `ListeningHistory`, or `VisitorSessions`, or while `UsageEvents` reference one
 of the user's visitor sessions. Deletion is soft: the account is marked with
@@ -131,7 +155,12 @@ reference if activity is written concurrently with deletion. Deleted users'
 email addresses remain reserved by the unique index. User email addresses are
 unique without case sensitivity. The activity endpoint accepts an optional
 `limit` (1-50, default 20) and reads from `SavedPlaces`, `ListeningHistory`,
-and `VisitorSessions`.
+`VisitorSessions`, and `UsageEvents`. User activity endpoints are scoped to
+the authenticated account. Saved places can reference visible places only;
+listening history accepts active audio IDs. Each listening-history submission
+creates a new record. User sessions use `LastSeenAt` as in the ERD. A
+`ClientEventId` is unique and retries with the same event payload are
+idempotent; reusing it for different event data returns `409`.
 
 Uploads accept valid JPEG, PNG, and WebP files up to 10 MB each. If captions or
 sort orders are provided during a batch upload, provide one value per file.
@@ -151,6 +180,7 @@ Set `MONGODB_PLACES_COLLECTION`, `MONGODB_PLACE_IMAGES_COLLECTION`,
 `MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION`, `MONGODB_USER_ACCOUNTS_COLLECTION`,
 `MONGODB_SAVED_PLACES_COLLECTION`, `MONGODB_LISTENING_HISTORY_COLLECTION`,
 `MONGODB_VISITOR_SESSIONS_COLLECTION`, `MONGODB_USAGE_EVENTS_COLLECTION`,
+`MONGODB_NARRATIONS_COLLECTION`,
 `MONGODB_CATEGORIES_COLLECTION`,
 `MONGODB_COUNTERS_COLLECTION`, `IMAGE_STORAGE_DIR`, and `CORS_ORIGINS` to
 override the defaults. The MongoDB database and collection names and file

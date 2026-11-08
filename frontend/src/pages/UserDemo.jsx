@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PLACE_PAGE_LIMIT = 12;
 const SAVED_PLACES_PAGE_LIMIT = 10;
@@ -101,6 +101,9 @@ export default function UserDemo({ apiUrl }) {
   const [listeningHistorySkip, setListeningHistorySkip] = useState(0);
   const [listeningHistoryLoading, setListeningHistoryLoading] = useState(false);
   const [listeningHistoryRefresh, setListeningHistoryRefresh] = useState(0);
+  const [replayingHistoryId, setReplayingHistoryId] = useState(null);
+  const [pendingReplayAudioId, setPendingReplayAudioId] = useState(null);
+  const audioElements = useRef(new Map());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -151,6 +154,24 @@ export default function UserDemo({ apiUrl }) {
       active = false;
     };
   }, [token, listeningHistorySkip, listeningHistoryRefresh, loadListeningHistory]);
+
+  // Phát sau khi chi tiết địa điểm và phần tử audio đã được render.
+  useEffect(() => {
+    if (!pendingReplayAudioId) {
+      return;
+    }
+
+    const audioElement = audioElements.current.get(String(pendingReplayAudioId));
+    if (!audioElement) {
+      return;
+    }
+
+    setPendingReplayAudioId(null);
+    audioElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    audioElement.play().catch(() => {
+      setError("Trình duyệt không phát được audio. Hãy thử nhấn nút phát trên audio.");
+    });
+  }, [pendingReplayAudioId, placeDetails, audiosByPlace]);
 
   const loadSavedPlaces = useCallback(async (activeToken, skip = savedPlacesSkip) => {
     return userRequest(
@@ -414,6 +435,48 @@ export default function UserDemo({ apiUrl }) {
       setError(requestError.message);
     } finally {
       setLoadingPlaceDetailsId(null);
+    }
+  }
+
+  async function replayHistoryItem(item) {
+    const placeId = Number(item.PlaceId);
+    if (!item.AudioId || !Number.isInteger(placeId) || placeId <= 0) {
+      setError("Lượt nghe này không còn đủ thông tin để phát lại.");
+      return;
+    }
+
+    setReplayingHistoryId(item.ListeningHistoryId);
+    setError("");
+    setNotice("");
+    try {
+      const details = await userRequest(
+        apiUrl,
+        token,
+        `/api/user/places/${placeId}`,
+      );
+      const audio = details.audios.find(
+        (candidate) => String(candidate.AudioId) === String(item.AudioId),
+      );
+      if (!audio) {
+        setError("Audio này đã bị xóa hoặc ngừng hoạt động nên không thể nghe lại.");
+        return;
+      }
+
+      setPlaceDetails(details);
+      setAudiosByPlace((current) => ({
+        ...current,
+        [details.place.PlaceId]: details.audios,
+      }));
+      setPendingReplayAudioId(audio.AudioId);
+      setNotice(`Đang phát lại "${audio.Title}".`);
+    } catch (requestError) {
+      setError(
+        requestError.status === 404
+          ? "Địa điểm hoặc audio không còn khả dụng để phát lại."
+          : requestError.message,
+      );
+    } finally {
+      setReplayingHistoryId(null);
     }
   }
 
@@ -967,6 +1030,13 @@ export default function UserDemo({ apiUrl }) {
                             `Không phát được audio "${audio.Title}".`,
                           )}
                           preload="none"
+                          ref={(element) => {
+                            if (element) {
+                              audioElements.current.set(String(audio.AudioId), element);
+                            } else {
+                              audioElements.current.delete(String(audio.AudioId));
+                            }
+                          }}
                           src={new URL(
                             audio.FileUrl,
                             `${apiUrl.replace(/\/+$/, "")}/`,
@@ -1143,6 +1213,25 @@ export default function UserDemo({ apiUrl }) {
                         {formatDate(item.ListenedAt)}
                       </small>
                     </span>
+                    <button
+                      className="text-button"
+                      disabled={
+                        !item.PlaceId
+                        || !item.AudioId
+                        || replayingHistoryId === item.ListeningHistoryId
+                      }
+                      onClick={() => replayHistoryItem(item)}
+                      title={
+                        item.PlaceId && item.AudioId
+                          ? "Phát lại audio này"
+                          : "Lượt nghe này không còn audio để phát"
+                      }
+                      type="button"
+                    >
+                      {replayingHistoryId === item.ListeningHistoryId
+                        ? "Đang tải..."
+                        : "Nghe lại"}
+                    </button>
                   </li>
                 ))}
                 {listeningHistoryLoading ? (

@@ -31,6 +31,26 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(404, raised.exception.status_code)
         self.repository.save_place.assert_not_awaited()
 
+    async def test_place_audio_list_is_limited_to_visible_places(self):
+        audios = [{"AudioId": "audio-1", "IsActive": True}]
+        self.repository.get_visible_place = AsyncMock(return_value={"PlaceId": 15})
+        self.repository.list_active_audios = AsyncMock(return_value=audios)
+
+        result = await self.service.list_place_audios(15)
+
+        self.assertEqual(audios, result)
+        self.repository.list_active_audios.assert_awaited_once_with(15)
+
+    async def test_place_audio_list_rejects_hidden_places(self):
+        self.repository.get_visible_place = AsyncMock(return_value=None)
+        self.repository.list_active_audios = AsyncMock()
+
+        with self.assertRaises(HTTPException) as raised:
+            await self.service.list_place_audios(15)
+
+        self.assertEqual(404, raised.exception.status_code)
+        self.repository.list_active_audios.assert_not_awaited()
+
     async def test_recording_listening_rejects_unknown_audio(self):
         self.repository.get_active_audio = AsyncMock(return_value=None)
         self.repository.record_listening = AsyncMock()

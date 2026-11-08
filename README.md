@@ -113,6 +113,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `POST` | `/api/user/auth/login` | Sign in with email/password and receive a user JWT |
 | `GET` | `/api/user/auth/me` | Get the authenticated user's profile |
 | `GET` | `/api/user/places` | Search and page through visible places |
+| `GET` | `/api/user/places/{place_id}/audios` | List active audio for a visible place |
 | `GET` | `/api/user/saved-places` | Page through the authenticated user's saved places |
 | `POST` | `/api/user/saved-places/{place_id}` | Save a visible place |
 | `DELETE` | `/api/user/saved-places/{place_id}` | Remove a saved place |

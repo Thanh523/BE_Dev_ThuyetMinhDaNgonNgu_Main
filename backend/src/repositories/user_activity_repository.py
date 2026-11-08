@@ -22,6 +22,25 @@ class UserActivityRepository:
             {"_id": 0, "PlaceId": 1},
         )
 
+    async def list_active_audios(self, place_id: int) -> list[dict]:
+        cursor = (
+            self.audios.find(
+                {"PlaceId": place_id, "IsActive": {"$ne": False}},
+                {
+                    "_id": 0,
+                    "AudioId": 1,
+                    "PlaceId": 1,
+                    "Language": 1,
+                    "Title": 1,
+                    "FileUrl": 1,
+                    "VoiceName": 1,
+                    "DurationSeconds": 1,
+                },
+            )
+            .sort([("Language", 1), ("CreatedAt", 1)])
+        )
+        return await cursor.to_list(length=None)
+
     async def get_active_audio(self, audio_id: str) -> dict | None:
         return await self.audios.find_one(
             {"AudioId": audio_id, "IsActive": {"$ne": False}},

@@ -70,6 +70,9 @@ export default function UserDemo({ apiUrl }) {
   const [placesSkip, setPlacesSkip] = useState(0);
   const [placesTotal, setPlacesTotal] = useState(0);
   const [placesLoading, setPlacesLoading] = useState(false);
+  const [audiosByPlace, setAudiosByPlace] = useState({});
+  const [selectedAudioPlaceId, setSelectedAudioPlaceId] = useState(null);
+  const [loadingAudioPlaceId, setLoadingAudioPlaceId] = useState(null);
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [listeningHistory, setListeningHistory] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -212,6 +215,9 @@ export default function UserDemo({ apiUrl }) {
     setPlaces([]);
     setPlacesTotal(0);
     setPlacesSkip(0);
+    setAudiosByPlace({});
+    setSelectedAudioPlaceId(null);
+    setLoadingAudioPlaceId(null);
     setSelectedSessionId("");
     setNotice("Đã đăng xuất user.");
     setError("");
@@ -249,6 +255,69 @@ export default function UserDemo({ apiUrl }) {
       isSaved ? "Đã bỏ lưu địa điểm." : "Đã lưu địa điểm.",
       () => refreshActivity(token),
     );
+  }
+
+  async function togglePlaceAudios(place) {
+    if (selectedAudioPlaceId === place.PlaceId) {
+      setSelectedAudioPlaceId(null);
+      return;
+    }
+
+    setSelectedAudioPlaceId(place.PlaceId);
+    if (Object.hasOwn(audiosByPlace, place.PlaceId)) {
+      return;
+    }
+
+    setLoadingAudioPlaceId(place.PlaceId);
+    setError("");
+    try {
+      const audios = await userRequest(
+        apiUrl,
+        token,
+        `/api/user/places/${place.PlaceId}/audios`,
+      );
+      setAudiosByPlace((current) => ({
+        ...current,
+        [place.PlaceId]: audios,
+      }));
+    } catch (requestError) {
+      setSelectedAudioPlaceId(null);
+      setError(requestError.message);
+    } finally {
+      setLoadingAudioPlaceId(null);
+    }
+  }
+
+  async function recordAudioPlayback(audio, element, completed) {
+    if (!token) {
+      return;
+    }
+    const playedSeconds = Math.floor(
+      completed ? element.duration : element.currentTime,
+    );
+    if (!Number.isFinite(playedSeconds) || playedSeconds <= 0) {
+      return;
+    }
+
+    try {
+      await userRequest(apiUrl, token, "/api/user/listening-history", {
+        method: "POST",
+        body: JSON.stringify({
+          audio_id: audio.AudioId,
+          played_seconds: playedSeconds,
+          is_completed: completed,
+        }),
+      });
+      await refreshActivity(token);
+      setNotice(
+        completed
+          ? `Đã nghe xong "${audio.Title}", lịch sử đã được lưu.`
+          : `Đã lưu tiến độ nghe "${audio.Title}".`,
+      );
+      setError("");
+    } catch (requestError) {
+      setError(requestError.message);
+    }
   }
 
   async function removePlace(id) {
@@ -495,15 +564,76 @@ export default function UserDemo({ apiUrl }) {
                         <h3>{place.PlaceName}</h3>
                         <p>{place.Address}</p>
                       </div>
-                      <button
-                        aria-pressed={isSaved}
-                        className={`button ${isSaved ? "button-outline" : ""}`}
-                        disabled={busy}
-                        onClick={() => toggleSavedPlace(place)}
-                        type="button"
-                      >
-                        {isSaved ? "Đã lưu · Bỏ lưu" : "Lưu địa điểm"}
-                      </button>
+                      <div className="user-place-actions">
+                        <button
+                          aria-pressed={isSaved}
+                          className={`button ${isSaved ? "button-outline" : ""}`}
+                          disabled={busy}
+                          onClick={() => toggleSavedPlace(place)}
+                          type="button"
+                        >
+                          {isSaved ? "Đã lưu · Bỏ lưu" : "Lưu địa điểm"}
+                        </button>
+                        <button
+                          aria-expanded={selectedAudioPlaceId === place.PlaceId}
+                          className="text-button"
+                          disabled={loadingAudioPlaceId === place.PlaceId}
+                          onClick={() => togglePlaceAudios(place)}
+                          type="button"
+                        >
+                          {loadingAudioPlaceId === place.PlaceId
+                            ? "Đang tải audio..."
+                            : selectedAudioPlaceId === place.PlaceId
+                              ? "Ẩn thuyết minh"
+                              : "Nghe thuyết minh"}
+                        </button>
+                      </div>
+                      {selectedAudioPlaceId === place.PlaceId && (
+                        <div className="user-place-audios">
+                          {(audiosByPlace[place.PlaceId] ?? []).length === 0 ? (
+                            <p>Địa điểm này chưa có audio thuyết minh.</p>
+                          ) : (
+                            audiosByPlace[place.PlaceId].map((audio) => (
+                              <div className="user-place-audio" key={audio.AudioId}>
+                                <div>
+                                  <strong>{audio.Title}</strong>
+                                  <span>
+                                    {audio.Language}
+                                    {audio.DurationSeconds
+                                      ? ` · ${audio.DurationSeconds} giây`
+                                      : ""}
+                                  </span>
+                                </div>
+                                <audio
+                                  controls
+                                  onEnded={(event) => recordAudioPlayback(
+                                    audio,
+                                    event.currentTarget,
+                                    true,
+                                  )}
+                                  onPause={(event) => {
+                                    if (!event.currentTarget.ended) {
+                                      recordAudioPlayback(
+                                        audio,
+                                        event.currentTarget,
+                                        false,
+                                      );
+                                    }
+                                  }}
+                                  onError={() => setError(
+                                    `Không phát được audio "${audio.Title}".`,
+                                  )}
+                                  preload="none"
+                                  src={new URL(
+                                    audio.FileUrl,
+                                    `${apiUrl.replace(/\/+$/, "")}/`,
+                                  ).toString()}
+                                />
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </article>
                   );
                 })}

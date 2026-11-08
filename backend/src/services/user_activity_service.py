@@ -31,6 +31,14 @@ class UserActivityService:
         except PyMongoError as error:
             raise self._unavailable("Place could not be saved.") from error
 
+    async def list_place_audios(self, place_id: int) -> list[dict]:
+        try:
+            if not await self.repository.get_visible_place(place_id):
+                raise HTTPException(status_code=404, detail="Place was not found.")
+            return await self.repository.list_active_audios(place_id)
+        except PyMongoError as error:
+            raise self._unavailable("Place audio is temporarily unavailable.") from error
+
     async def unsave_place(self, user_id: str, place_id: int) -> bool:
         try:
             return await self.repository.unsave_place(user_id, place_id)

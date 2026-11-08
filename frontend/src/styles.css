@@ -16,7 +16,6 @@
 }
 
 body {
-  min-width: 320px;
   margin: 0;
 }
 
@@ -1332,6 +1331,17 @@ input::placeholder {
   .page-shell {
     width: min(100% - 24px, 460px);
     padding-top: 26px;
+  }
+
+  .admin-tabs {
+    flex-wrap: wrap;
+  }
+
+  .admin-tabs button {
+    min-width: 0;
+    flex: 1 1 calc(50% - 7px);
+    padding-right: 8px;
+    padding-left: 8px;
   }
 
   .page-header {

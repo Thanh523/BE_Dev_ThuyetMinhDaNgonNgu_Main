@@ -165,6 +165,7 @@ class UserAccountRepository:
                 "_id": 0,
                 "ListeningHistoryId": 1,
                 "AudioId": 1,
+                "PlaceId": 1,
                 "ListenedAt": 1,
                 "PlayedSeconds": 1,
                 "IsCompleted": 1,

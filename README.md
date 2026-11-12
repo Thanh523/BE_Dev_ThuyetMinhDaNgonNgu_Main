@@ -166,8 +166,10 @@ unique without case sensitivity. The activity endpoint accepts an optional
 `limit` (1-50, default 20) and reads from `SavedPlaces`, `ListeningHistory`,
 `VisitorSessions`, and `UsageEvents`. User activity endpoints are scoped to
 the authenticated account. Saved places can reference visible places only;
-listening history stores `ListeningHistoryId`, `UserId`, `AudioId`,
-`ListenedAt`, `PlayedSeconds`, and `IsCompleted` as in the ERD. `AudioId` is
+listening history stores `ListeningHistoryId`, `UserId`, `AudioId`, `PlaceId`,
+`ListenedAt`, `PlayedSeconds`, and `IsCompleted` as in the ERD. `PlaceId` is
+copied from the active audio's narration relationship when the record is
+created. `AudioId` is
 resolved through `AudioFiles` and its `NarrationId` link to `Narrations`;
 legacy `PlaceAudios` records remain readable during migration. Each
 listening-history submission creates a new record. User sessions use

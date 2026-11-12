@@ -176,6 +176,9 @@ listening-history submission creates a new record. User sessions use
 `LastSeenAt` as in the ERD. A
 `ClientEventId` is unique and retries with the same event payload are
 idempotent; reusing it for different event data returns `409`.
+`SavedPlaces` stores `SavedPlaceId`, `UserId`, `PlaceId`, and `SavedAt`;
+`UserId` and `PlaceId` are taken from the authenticated user and a visible
+place, and `(UserId, PlaceId)` is unique.
 
 Uploads accept valid JPEG, PNG, and WebP files up to 10 MB each. If captions or
 sort orders are provided during a batch upload, provide one value per file.

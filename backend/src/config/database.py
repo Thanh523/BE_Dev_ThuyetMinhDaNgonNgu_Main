@@ -8,6 +8,16 @@ from pymongo.collation import Collation
 from src.config.settings import get_settings
 
 
+DEFAULT_LANGUAGES = (
+    ("vi", "Vietnamese"),
+    ("en", "English"),
+    ("zh-CN", "Chinese (Simplified)"),
+    ("ja", "Japanese"),
+    ("ko", "Korean"),
+    ("fr", "French"),
+)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
@@ -38,6 +48,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             [("CategoryId", ASCENDING)],
             unique=True,
         )
+        languages = database[settings.languages_collection]
+        await languages.create_index(
+            [("LanguageCode", ASCENDING)],
+            unique=True,
+        )
+        for language_code, language_name in DEFAULT_LANGUAGES:
+            await languages.update_one(
+                {"LanguageCode": language_code},
+                {
+                    "$setOnInsert": {
+                        "LanguageCode": language_code,
+                        "LanguageName": language_name,
+                    }
+                },
+                upsert=True,
+            )
         await database[settings.audio_collection].create_index(
             [("AudioId", ASCENDING)],
             unique=True,

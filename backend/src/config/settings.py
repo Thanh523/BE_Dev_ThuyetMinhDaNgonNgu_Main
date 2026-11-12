@@ -48,6 +48,7 @@ class Settings:
     image_storage_dir: Path
     audio_storage_dir: Path = Path("uploads/audio")
     categories_collection: str = "Categories"
+    languages_collection: str = "Languages"
     audio_collection: str = "PlaceAudios"
     narrations_collection: str = "Narrations"
     audio_files_collection: str = "AudioFiles"
@@ -92,6 +93,7 @@ def get_settings() -> Settings:
             )
         ).resolve(),
         categories_collection=os.getenv("MONGODB_CATEGORIES_COLLECTION", "Categories"),
+        languages_collection=os.getenv("MONGODB_LANGUAGES_COLLECTION", "Languages"),
         audio_collection=os.getenv("MONGODB_AUDIO_COLLECTION", "PlaceAudios"),
         narrations_collection=os.getenv("MONGODB_NARRATIONS_COLLECTION", "Narrations"),
         audio_files_collection=os.getenv(

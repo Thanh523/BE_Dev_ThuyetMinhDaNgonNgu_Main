@@ -124,11 +124,13 @@ class UserActivityService:
     ) -> dict:
         # Không ghi lịch sử cho audio không tồn tại hoặc đã bị admin vô hiệu hóa.
         try:
-            if not await self.repository.get_active_audio(audio_id):
+            audio = await self.repository.get_active_audio(audio_id)
+            if not audio or audio.get("PlaceId") is None:
                 raise HTTPException(status_code=404, detail="Audio was not found.")
             return await self.repository.record_listening(
                 user_id,
                 audio_id,
+                audio["PlaceId"],
                 played_seconds,
                 is_completed,
                 datetime.now(timezone.utc),

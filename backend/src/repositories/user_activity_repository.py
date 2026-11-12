@@ -95,19 +95,32 @@ class UserActivityRepository:
         return await cursor.to_list(length=None)
 
     async def get_active_audio(self, audio_id: str) -> dict | None:
-        projection = {"_id": 0, "AudioId": 1}
+        projection = {
+            "_id": 0,
+            "AudioId": 1,
+            "PlaceId": 1,
+            "NarrationId": 1,
+        }
         audio = await self.audio_files.find_one(
             {"AudioId": audio_id, "IsActive": {"$ne": False}},
             projection,
         )
         if audio is not None:
+            if audio.get("PlaceId") is None and audio.get("NarrationId") is not None:
+                narration = await self.narrations.find_one(
+                    {"NarrationId": audio["NarrationId"]},
+                    {"_id": 0, "PlaceId": 1},
+                )
+                if narration is not None:
+                    audio["PlaceId"] = narration.get("PlaceId")
             return audio
         if self.audio_files is self.audios:
             return None
-        return await self.audios.find_one(
+        audio = await self.audios.find_one(
             {"AudioId": audio_id, "IsActive": {"$ne": False}},
             projection,
         )
+        return audio
 
     async def get_narration(self, narration_id: int | str) -> dict | None:
         query = {"NarrationId": narration_id}
@@ -194,6 +207,7 @@ class UserActivityRepository:
                     "_id": 0,
                     "ListeningHistoryId": 1,
                     "AudioId": 1,
+                    "PlaceId": 1,
                     "ListenedAt": 1,
                     "PlayedSeconds": 1,
                     "IsCompleted": 1,
@@ -321,6 +335,7 @@ class UserActivityRepository:
         self,
         user_id: str,
         audio_id: str,
+        place_id: int,
         played_seconds: int,
         is_completed: bool,
         now: datetime,
@@ -330,6 +345,7 @@ class UserActivityRepository:
             "ListeningHistoryId": uuid.uuid4().hex,
             "UserId": user_id,
             "AudioId": audio_id,
+            "PlaceId": place_id,
             "ListenedAt": now,
             "PlayedSeconds": played_seconds,
             "IsCompleted": is_completed,

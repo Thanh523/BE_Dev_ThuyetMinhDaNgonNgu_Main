@@ -323,7 +323,9 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_usage_event_requires_owned_active_session(self):
         self.repository.get_session = AsyncMock(return_value={"EndedAt": None})
         self.repository.touch_session = AsyncMock(return_value={"SessionId": "session-1"})
-        self.repository.get_active_audio = AsyncMock(return_value={"AudioId": "audio-1"})
+        self.repository.get_active_audio = AsyncMock(
+            return_value={"AudioId": "audio-1", "PlaceId": 15}
+        )
         self.repository.get_narration = AsyncMock(return_value=None)
         self.repository.record_usage_event = AsyncMock()
 
@@ -370,7 +372,9 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_duplicate_client_event_with_different_payload_conflicts(self):
         self.repository.get_session = AsyncMock(return_value={"EndedAt": None})
         self.repository.touch_session = AsyncMock(return_value={"SessionId": "session-1"})
-        self.repository.get_active_audio = AsyncMock()
+        self.repository.get_active_audio = AsyncMock(
+            return_value={"AudioId": "audio-1", "PlaceId": 15}
+        )
         self.repository.get_narration = AsyncMock()
         self.repository.record_usage_event = AsyncMock(
             return_value={
@@ -439,6 +443,7 @@ class UserActivityRepositoryTests(unittest.IsolatedAsyncioTestCase):
         result = await repository.record_listening(
             "user-1",
             "audio-1",
+            15,
             42,
             False,
             datetime.now(timezone.utc),
@@ -447,6 +452,7 @@ class UserActivityRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("_id", result)
         self.assertNotIn("UserId", result)
         self.assertEqual("audio-1", result["AudioId"])
+        self.assertEqual(15, result["PlaceId"])
 
 
 if __name__ == "__main__":

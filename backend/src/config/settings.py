@@ -48,6 +48,8 @@ class Settings:
     audio_storage_dir: Path = Path("uploads/audio")
     categories_collection: str = "Categories"
     audio_collection: str = "PlaceAudios"
+    narrations_collection: str = "Narrations"
+    audio_files_collection: str = "AudioFiles"
     counters_collection: str = "Counters"
     admin_accounts_collection: str = "AdminAccounts"
     admin_activity_logs_collection: str = "AdminActivityLogs"
@@ -89,6 +91,11 @@ def get_settings() -> Settings:
         ).resolve(),
         categories_collection=os.getenv("MONGODB_CATEGORIES_COLLECTION", "Categories"),
         audio_collection=os.getenv("MONGODB_AUDIO_COLLECTION", "PlaceAudios"),
+        narrations_collection=os.getenv("MONGODB_NARRATIONS_COLLECTION", "Narrations"),
+        audio_files_collection=os.getenv(
+            "MONGODB_AUDIO_FILES_COLLECTION",
+            "AudioFiles",
+        ),
         counters_collection=os.getenv("MONGODB_COUNTERS_COLLECTION", "Counters"),
         admin_accounts_collection=os.getenv(
             "MONGODB_ADMIN_ACCOUNTS_COLLECTION",

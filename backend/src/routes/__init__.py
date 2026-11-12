@@ -6,6 +6,7 @@ from src.routes.audio_routes import router as audio_router
 from src.routes.place_routes import router as place_router
 # Nạp route quản lý user vào danh sách router của ứng dụng.
 from src.routes.user_account_routes import router as user_account_router
+from src.routes.narration_routes import router as narration_router
 
 routers = (
     image_router,
@@ -15,6 +16,7 @@ routers = (
     place_router,
     category_router,
     user_account_router,
+    narration_router,
 )
 
 __all__ = ["routers"]

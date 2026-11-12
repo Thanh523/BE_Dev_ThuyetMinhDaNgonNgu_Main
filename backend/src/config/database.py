@@ -46,6 +46,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             [("PlaceId", ASCENDING), ("Language", ASCENDING)],
             unique=True,
         )
+        await database[settings.narrations_collection].create_index(
+            [("NarrationId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.narrations_collection].create_index(
+            [("PlaceId", ASCENDING), ("LanguageCode", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.audio_files_collection].create_index(
+            [("AudioId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.audio_files_collection].create_index(
+            [("NarrationId", ASCENDING)],
+        )
         await database[settings.categories_collection].create_index(
             [("CategoryName", ASCENDING)],
             unique=True,

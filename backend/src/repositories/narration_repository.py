@@ -13,6 +13,7 @@ class NarrationRepository:
         self.narrations = database[settings.narrations_collection]
         self.audio_files = database[settings.audio_files_collection]
         self.places = database[settings.places_collection]
+        self.languages = database[settings.languages_collection]
 
     async def list_for_place(self, place_id: int) -> list[dict]:
         cursor = self.narrations.find(
@@ -30,7 +31,20 @@ class NarrationRepository:
     async def place_exists(self, place_id: int) -> bool:
         return await self.places.find_one({"PlaceId": place_id}, {"_id": 1}) is not None
 
-    async def language_exists(
+    async def language_exists(self, language_code: str) -> bool:
+        return await self.languages.find_one(
+            {"LanguageCode": language_code},
+            {"_id": 1},
+        ) is not None
+
+    async def list_languages(self) -> list[dict]:
+        cursor = self.languages.find(
+            {},
+            {"_id": 0, "LanguageCode": 1, "LanguageName": 1},
+        ).sort("LanguageCode", 1)
+        return await cursor.to_list(length=None)
+
+    async def narration_language_exists(
         self,
         place_id: int,
         language_code: str,

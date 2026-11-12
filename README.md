@@ -108,6 +108,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `POST` | `/api/admin/categories` | Create a category |
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
 | `GET` | `/api/admin/places/{place_id}/narrations` | List narration text for a place |
+| `GET` | `/api/admin/narration-languages` | List language codes available for narrations |
 | `POST` | `/api/admin/places/{place_id}/narrations` | Create narration text |
 | `PATCH` | `/api/admin/narrations/{narration_id}` | Update narration text |
 | `DELETE` | `/api/admin/narrations/{narration_id}` | Delete narration without audio references |

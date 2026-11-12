@@ -38,7 +38,9 @@ class NarrationService:
         try:
             if not await self.repository.place_exists(place_id):
                 raise HTTPException(status_code=404, detail="Place was not found.")
-            if await self.repository.language_exists(place_id, language):
+            if not await self.repository.language_exists(language):
+                raise HTTPException(status_code=422, detail="Language was not found.")
+            if await self.repository.narration_language_exists(place_id, language):
                 raise HTTPException(
                     status_code=409,
                     detail="This place already has a narration for the selected language.",
@@ -75,12 +77,15 @@ class NarrationService:
             if narration is None:
                 raise HTTPException(status_code=404, detail="Narration was not found.")
             language = mapped.get("LanguageCode")
-            if language and await self.repository.language_exists(
-                narration["PlaceId"],
-                language,
-                narration_id,
-            ):
-                raise HTTPException(status_code=409, detail="Narration already exists.")
+            if language:
+                if not await self.repository.language_exists(language):
+                    raise HTTPException(status_code=422, detail="Language was not found.")
+                if await self.repository.narration_language_exists(
+                    narration["PlaceId"],
+                    language,
+                    narration_id,
+                ):
+                    raise HTTPException(status_code=409, detail="Narration already exists.")
             result = await self.repository.update(narration_id, mapped)
         except DuplicateKeyError as error:
             raise HTTPException(status_code=409, detail="Narration already exists.") from error
@@ -89,6 +94,15 @@ class NarrationService:
         if result is None:
             raise HTTPException(status_code=404, detail="Narration was not found.")
         return result
+
+    async def list_languages(self) -> list[dict]:
+        try:
+            return await self.repository.list_languages()
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Language list is temporarily unavailable.",
+            ) from error
 
     async def delete(self, narration_id: int) -> None:
         try:

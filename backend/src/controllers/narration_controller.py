@@ -46,6 +46,11 @@ async def list_narrations(place_id: int, database=Depends(get_database)) -> list
     return await _service(database).list_for_place(place_id)
 
 
+@router.get("/narration-languages")
+async def list_narration_languages(database=Depends(get_database)) -> list[dict]:
+    return await _service(database).list_languages()
+
+
 @router.post(
     "/places/{place_id}/narrations",
     response_model=NarrationView,

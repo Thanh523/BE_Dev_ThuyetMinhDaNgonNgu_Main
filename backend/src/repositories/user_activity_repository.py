@@ -15,6 +15,12 @@ class UserActivityRepository:
         self.categories = database[settings.categories_collection]
         self.images = database[settings.place_images_collection]
         self.audios = database[settings.audio_collection]
+        audio_files_collection = getattr(
+            settings,
+            "audio_files_collection",
+            settings.audio_collection,
+        )
+        self.audio_files = database[audio_files_collection]
         self.narrations = database[settings.narrations_collection]
 
     async def get_visible_place(self, place_id: int) -> dict | None:
@@ -89,9 +95,18 @@ class UserActivityRepository:
         return await cursor.to_list(length=None)
 
     async def get_active_audio(self, audio_id: str) -> dict | None:
+        projection = {"_id": 0, "AudioId": 1}
+        audio = await self.audio_files.find_one(
+            {"AudioId": audio_id, "IsActive": {"$ne": False}},
+            projection,
+        )
+        if audio is not None:
+            return audio
+        if self.audio_files is self.audios:
+            return None
         return await self.audios.find_one(
             {"AudioId": audio_id, "IsActive": {"$ne": False}},
-            {"_id": 0, "AudioId": 1},
+            projection,
         )
 
     async def get_narration(self, narration_id: int | str) -> dict | None:
@@ -198,16 +213,61 @@ class UserActivityRepository:
             if item.get("AudioId") is not None
         }
         if audio_ids:
-            audios = await self.audios.find(
+            audio_projection = {
+                "_id": 0,
+                "AudioId": 1,
+                "PlaceId": 1,
+                "Title": 1,
+                "Language": 1,
+                "LanguageCode": 1,
+                "NarrationId": 1,
+            }
+            audio_cursor = self.audio_files.find(
                 {"AudioId": {"$in": list(audio_ids)}},
-                {
-                    "_id": 0,
-                    "AudioId": 1,
-                    "PlaceId": 1,
-                    "Title": 1,
-                    "Language": 1,
-                },
-            ).to_list(length=len(audio_ids))
+                audio_projection,
+            )
+            audios = await audio_cursor.to_list(length=len(audio_ids))
+            if self.audio_files is not self.audios:
+                legacy_cursor = self.audios.find(
+                    {"AudioId": {"$in": list(audio_ids)}},
+                    audio_projection,
+                )
+                legacy_audios = await legacy_cursor.to_list(length=len(audio_ids))
+                known_audio_ids = {str(audio["AudioId"]) for audio in audios}
+                audios.extend(
+                    audio
+                    for audio in legacy_audios
+                    if str(audio["AudioId"]) not in known_audio_ids
+                )
+            narration_ids = {
+                audio["NarrationId"]
+                for audio in audios
+                if audio.get("NarrationId") is not None
+            }
+            narrations_by_id: dict[str, dict] = {}
+            if narration_ids:
+                narration_cursor = self.narrations.find(
+                    {"NarrationId": {"$in": list(narration_ids)}},
+                    {
+                        "_id": 0,
+                        "NarrationId": 1,
+                        "PlaceId": 1,
+                        "LanguageCode": 1,
+                        "Title": 1,
+                    },
+                )
+                narrations = await narration_cursor.to_list(length=len(narration_ids))
+                narrations_by_id = {
+                    str(narration["NarrationId"]): narration
+                    for narration in narrations
+                }
+                for audio in audios:
+                    narration = narrations_by_id.get(str(audio.get("NarrationId")))
+                    if narration is None:
+                        continue
+                    audio.setdefault("PlaceId", narration.get("PlaceId"))
+                    audio.setdefault("Title", narration.get("Title"))
+                    audio.setdefault("Language", narration.get("LanguageCode"))
             audios_by_id = {str(audio["AudioId"]): audio for audio in audios}
             place_ids = {
                 audio["PlaceId"]
@@ -234,7 +294,10 @@ class UserActivityRepository:
                     item["PlaceName"] = None
                     continue
                 item["AudioTitle"] = audio.get("Title")
-                item["Language"] = audio.get("Language")
+                item["Language"] = audio.get(
+                    "Language",
+                    audio.get("LanguageCode"),
+                )
                 item["PlaceId"] = audio.get("PlaceId")
                 item["PlaceName"] = places_by_id.get(str(audio.get("PlaceId")))
 

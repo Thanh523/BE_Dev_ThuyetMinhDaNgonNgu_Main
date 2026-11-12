@@ -143,6 +143,48 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("City Museum", items[0]["PlaceName"])
         self.assertEqual(15, items[0]["PlaceId"])
 
+    async def test_listening_history_resolves_audio_file_through_narration(self):
+        history_collection = Mock()
+        history_collection.find.return_value = FakeMongoCursor([
+            {"ListeningHistoryId": "history-1", "AudioId": "audio-1"},
+        ])
+        history_collection.count_documents = AsyncMock(return_value=1)
+        audio_files = Mock()
+        audio_files.find.return_value = FakeMongoCursor([
+            {
+                "AudioId": "audio-1",
+                "NarrationId": 7,
+                "FileUrl": "/uploads/audio/guide.mp3",
+            },
+        ])
+        narrations = Mock()
+        narrations.find.return_value = FakeMongoCursor([
+            {
+                "NarrationId": 7,
+                "PlaceId": 15,
+                "LanguageCode": "vi",
+                "Title": "Museum introduction",
+            },
+        ])
+        places = Mock()
+        places.find.return_value = FakeMongoCursor([
+            {"PlaceId": 15, "PlaceName": "City Museum"},
+        ])
+        repository = object.__new__(UserActivityRepository)
+        repository.listening_history = history_collection
+        repository.audio_files = audio_files
+        repository.audios = audio_files
+        repository.narrations = narrations
+        repository.places = places
+
+        items, total = await repository.list_listening_history("user-1", 0, 20)
+
+        self.assertEqual(1, total)
+        self.assertEqual("Museum introduction", items[0]["AudioTitle"])
+        self.assertEqual("vi", items[0]["Language"])
+        self.assertEqual("City Museum", items[0]["PlaceName"])
+        self.assertEqual(15, items[0]["PlaceId"])
+
     async def test_deleting_history_entry_is_scoped_to_user(self):
         self.repository.delete_listening_history_entry = AsyncMock(return_value=True)
 

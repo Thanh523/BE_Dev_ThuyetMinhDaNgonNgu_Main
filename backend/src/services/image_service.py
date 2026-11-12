@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -13,11 +14,23 @@ from src.config.settings import Settings
 from src.repositories.place_image_repository import PlaceImageRepository
 
 
+IMAGE_URL_PREFIX = "/uploads/images/"
+SAFE_PLACE_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SUPPORTED_FORMATS = {
     "JPEG": "jpg",
     "PNG": "png",
     "WEBP": "webp",
 }
+
+
+def _place_image_folder_name(place_id: int | str, slug: str) -> str:
+    place_id_value = str(place_id)
+    if (
+        not place_id_value.isdecimal()
+        or SAFE_PLACE_SLUG.fullmatch(slug) is None
+    ):
+        raise ValueError("Place ID or slug is invalid for image storage.")
+    return f"{place_id_value}-{slug}"
 
 
 def _inspect_image(path: str) -> str:
@@ -87,8 +100,25 @@ class ImageService:
                 detail="Sort orders in one upload must be unique.",
             )
 
-        if not await self.repository.place_exists(place_id):
+        place = await self.repository.get_place(place_id)
+        if place is None:
             raise HTTPException(status_code=404, detail="Place was not found.")
+        folder_name = _place_image_folder_name(
+            place_id,
+            place.get("Slug") or str(place_id),
+        )
+        image_directory = self.settings.image_storage_dir / folder_name
+        try:
+            await asyncio.to_thread(
+                image_directory.mkdir,
+                parents=True,
+                exist_ok=True,
+            )
+        except OSError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Place image folder could not be created.",
+            ) from error
 
         if sort_orders is not None:
             duplicates = await self.repository.sort_orders_in_use(place_id, sort_orders)
@@ -110,7 +140,7 @@ class ImageService:
                 staged_files.append(temporary_path)
                 image_id = uuid.uuid4().hex
                 extension = SUPPORTED_FORMATS[image_format]
-                final_path = self.settings.image_storage_dir / f"{image_id}.{extension}"
+                final_path = image_directory / f"{image_id}.{extension}"
                 await asyncio.to_thread(os.replace, temporary_path, final_path)
                 staged_files[-1] = final_path
 
@@ -118,7 +148,9 @@ class ImageService:
                     {
                         "ImageId": image_id,
                         "PlaceId": place_id,
-                        "FileUrl": f"/uploads/images/{final_path.name}",
+                        "FileUrl": (
+                            f"{IMAGE_URL_PREFIX}{folder_name}/{final_path.name}"
+                        ),
                         "SortOrder": (
                             sort_orders[index]
                             if sort_orders is not None
@@ -270,11 +302,18 @@ class ImageService:
             await asyncio.to_thread(_remove_file, path)
 
     def _path_from_file_url(self, file_url: str) -> Path:
-        prefix = "/uploads/images/"
-        filename = file_url.removeprefix(prefix)
-        if not file_url.startswith(prefix) or not filename or "/" in filename or "\\" in filename:
+        if not file_url.startswith(IMAGE_URL_PREFIX):
             raise ValueError("Stored image URL is outside the configured image directory.")
-        path = (self.settings.image_storage_dir / filename).resolve()
-        if path.parent != self.settings.image_storage_dir:
-            raise ValueError("Stored image path is outside the configured image directory.")
+
+        relative_url = file_url.removeprefix(IMAGE_URL_PREFIX)
+        if "\\" in relative_url or not relative_url:
+            raise ValueError("Stored image URL is invalid.")
+
+        path = (self.settings.image_storage_dir / relative_url).resolve()
+        try:
+            path.relative_to(self.settings.image_storage_dir.resolve())
+        except ValueError as error:
+            raise ValueError(
+                "Stored image path is outside the configured image directory."
+            ) from error
         return path

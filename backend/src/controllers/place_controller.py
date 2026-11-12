@@ -50,6 +50,7 @@ def _service(database) -> PlaceService:
     return PlaceService(
         PlaceRepository(database, settings),
         CategoryRepository(database, settings),
+        settings.image_storage_dir,
     )
 
 

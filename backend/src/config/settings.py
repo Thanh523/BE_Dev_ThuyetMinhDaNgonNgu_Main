@@ -26,6 +26,7 @@ def _read_mongodb_uri() -> str:
         return f"mongodb+srv://{configured_uri}"
     if username and password and configured_uri:
         return (
+
             f"mongodb+srv://{quote_plus(username)}:{quote_plus(password)}"
             f"@{configured_uri}/?retryWrites=true&w=majority"
         )
@@ -60,6 +61,7 @@ class Settings:
     visitor_sessions_collection: str = "VisitorSessions"
     usage_events_collection: str = "UsageEvents"
     max_image_size_bytes: int = 10 * 1024 * 1024
+    max_audio_size_bytes: int = 50 * 1024 * 1024
 
 
 def get_settings() -> Settings:
@@ -75,7 +77,7 @@ def get_settings() -> Settings:
         jwt_audience=os.getenv("JWT_AUDIENCE"),
         cors_origins=_read_csv(
             "CORS_ORIGINS",
-            "http://localhost:3000,http://localhost:5173",
+            "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173",
         ),
         image_storage_dir=Path(
             os.getenv(
@@ -125,5 +127,8 @@ def get_settings() -> Settings:
         usage_events_collection=os.getenv(
             "MONGODB_USAGE_EVENTS_COLLECTION",
             "UsageEvents",
+        ),
+        max_audio_size_bytes=int(
+            os.getenv("MAX_AUDIO_SIZE_BYTES", str(50 * 1024 * 1024))
         ),
     )

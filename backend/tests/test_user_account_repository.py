@@ -317,48 +317,6 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(409, raised.exception.status_code)
         repository.update_profile.assert_not_called()
 
-    async def test_temporary_user_creation_hashes_password_and_returns_no_hash(self):
-        collection = FakeUserCollection([])
-        repository = UserAccountRepository(FakeDatabase(collection), self.settings)
-        service = UserAccountService(repository)
-
-        result = await service.create_user(
-            " Test Account ",
-            "TEST@example.com",
-            "a-long-initial-password",
-        )
-
-        stored_user = collection.items[0]
-        self.assertEqual("Test Account", stored_user["FullName"])
-        self.assertEqual("test@example.com", stored_user["Email"])
-        self.assertNotEqual("a-long-initial-password", stored_user["PasswordHash"])
-        self.assertNotIn("PasswordHash", result)
-        self.assertTrue(stored_user["IsActive"])
-
-    async def test_temporary_user_creation_rejects_short_password(self):
-        service = UserAccountService(Mock())
-
-        with self.assertRaises(HTTPException) as raised:
-            await service.create_user("Test Account", "test@example.com", "short")
-
-        self.assertEqual(422, raised.exception.status_code)
-
-    async def test_temporary_user_creation_rejects_duplicate_email(self):
-        repository = Mock()
-        repository.email_exists = AsyncMock(return_value=True)
-        repository.create = AsyncMock()
-        service = UserAccountService(repository)
-
-        with self.assertRaises(HTTPException) as raised:
-            await service.create_user(
-                "Test Account",
-                "taken@example.com",
-                "a-long-initial-password",
-            )
-
-        self.assertEqual(409, raised.exception.status_code)
-        repository.create.assert_not_called()
-
     async def test_profile_update_only_returns_public_fields(self):
         users = [
             {
@@ -417,12 +375,24 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
                 }
             ]
         )
+        usage_events = FakeUserCollection(
+            [
+                {
+                    "EventId": "event-4",
+                    "ClientEventId": "client-event-4",
+                    "SessionId": "session-3",
+                    "EventType": "audio_play",
+                    "CreatedAt": "2026-11-01T10:16:00Z",
+                }
+            ]
+        )
         repository = UserAccountRepository(
             FakeDatabase(
                 user_collection,
                 saved_places,
                 listening_history,
                 visitor_sessions,
+                usage_events,
             ),
             self.settings,
         )
@@ -437,6 +407,9 @@ class UserAccountRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(15, activity["listening_history"][0]["AudioId"])
         self.assertEqual(1, activity["visitor_sessions_total"])
         self.assertEqual("session-3", activity["visitor_sessions"][0]["SessionId"])
+        self.assertEqual("2026-11-01T10:15:00Z", activity["visitor_sessions"][0]["LastSeenAt"])
+        self.assertEqual(1, activity["usage_events_total"])
+        self.assertEqual("audio_play", activity["usage_events"][0]["EventType"])
 
     async def test_delete_user_when_no_related_activity_exists(self):
         users = FakeUserCollection(

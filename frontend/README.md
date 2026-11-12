@@ -13,8 +13,18 @@ npm run dev
 
 Open the Vite URL (normally `http://localhost:5173`). Start the backend from
 `backend` with `python -m uvicorn src.main:app --reload`.
+The backend allows both `localhost:5173` and `127.0.0.1:5173` by default; restart
+the backend after changing `CORS_ORIGINS`.
 
-Enter the backend URL and admin username/password. A `PlaceId` that exists in
+The **Demo người dùng** tab works without an admin login. Enter the backend
+URL, register a user, then sign in to browse visible places, search, save and
+unsave places, and play active audio narrations. Listening progress is recorded
+when playback is paused or completed and shown in the listening history.
+The user token stays in page memory and is not stored in browser storage. Use
+IDs that already exist in MongoDB for `AudioId` and optional `NarrationId`; the
+backend rejects missing or inactive content references.
+
+For admin management, enter the backend URL and admin username/password. A `PlaceId` that exists in
 the `Places` collection is optional during login. The login endpoint returns an
 admin JWT valid for 8 hours. The token stays in page memory and is not saved to
 browser storage.
@@ -23,13 +33,12 @@ browser storage.
 After login, use the separate **Địa điểm**, **Hình ảnh**, **Danh mục**, and
 **Người dùng** pages. The user page searches accounts by name/email, filters
 by active status, pages through results, and lets an admin lock or unlock an
-account, edit the user's name and email, and view saved places and listening
-history and visitor sessions when available. The admin page manages existing
-user accounts. It currently has a temporary admin-only test-user creation form;
-remove it after self-service user registration is implemented. Admins can
-soft-delete a user only if no related activity records remain. This disables
-the account and hides it from the list while retaining the account record and
-activity history in MongoDB. The places page
+account, edit the user's name and email, and view saved places, listening
+history, visitor sessions, and usage events when available. The admin page
+manages existing user accounts. Admins can soft-delete a user only if no
+related activity records remain. This
+disables the account and hides it from the list while retaining the account
+record and activity history in MongoDB. The places page
 supports place
 CRUD, detail view, search, filters, visibility toggling, and safe deletion
 checks. The categories page supports category CRUD. The images page can list a
@@ -39,4 +48,3 @@ Leaving all sort orders blank lets the backend append uploaded images
 automatically. The backend CORS configuration must include the frontend's
 origin if it has been changed from its defaults. See the repository README for
 creating the first admin account and configuring the JWT signing key.
-

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import PyMongoError
 
@@ -20,14 +20,11 @@ router = APIRouter(
 )
 
 
-class AudioCreate(BaseModel):
-    source_text: str = Field(min_length=1, max_length=10000)
-    language: str = Field(min_length=2, max_length=10)
-    title: str = Field(default="", max_length=200)
-
-
 class AudioUpdate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    language: str | None = Field(default=None, min_length=2, max_length=10)
+    voice_name: str | None = Field(default=None, min_length=1, max_length=100)
+    is_active: bool | None = None
 
 
 class AudioView(BaseModel):
@@ -43,6 +40,9 @@ class AudioView(BaseModel):
     voice: str = Field(alias="Voice")
     created_at: datetime = Field(alias="CreatedAt")
     updated_at: datetime = Field(alias="UpdatedAt")
+    voice_name: str = Field(default="", alias="VoiceName")
+    duration_seconds: int = Field(default=0, alias="DurationSeconds")
+    is_active: bool = Field(default=True, alias="IsActive")
 
 
 def _service(database) -> AudioService:
@@ -73,37 +73,75 @@ async def _log(database, claims: dict, action: str, audio_id: str, description: 
         raise HTTPException(status_code=503, detail="Audio operation completed, but its activity log could not be saved.") from error
 
 
-@router.get("/places/{place_id}/audios", response_model=list[AudioView], response_model_by_alias=False)
+@router.get("/places/{place_id}/audios", response_model=list[AudioView])
 async def list_audios(place_id: str, database=Depends(get_database)) -> list[dict]:
     return await _service(database).list_for_place(parse_place_id(place_id))
 
 
-@router.post("/places/{place_id}/audios", response_model=AudioView, response_model_by_alias=False, status_code=201)
-async def create_audio(
+@router.post(
+    "/places/{place_id}/audios/upload",
+    response_model=AudioView,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_audio(
     place_id: str,
-    request: AudioCreate,
+    file: UploadFile = File(...),
+    language: str = Form(...),
+    title: str = Form(default=""),
+    voice_name: str = Form(default=""),
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).create(
+    audio = await _service(database).upload(
         parse_place_id(place_id),
-        request.source_text,
-        request.language,
-        request.title,
+        language,
+        file,
+        title,
+        voice_name,
     )
-    await _log(database, claims, "CREATE", audio["AudioId"], f"Created audio for place {audio['PlaceId']}.")
+    await _log(
+        database,
+        claims,
+        "UPLOAD",
+        audio["AudioId"],
+        f"Uploaded audio for place {audio['PlaceId']}.",
+    )
     return audio
 
 
-@router.patch("/audios/{audio_id}", response_model=AudioView, response_model_by_alias=False)
+@router.put(
+    "/audios/{audio_id}/file",
+    response_model=AudioView,
+)
+async def replace_audio_file(
+    audio_id: str,
+    file: UploadFile = File(...),
+    database=Depends(get_database),
+    claims: dict = Depends(require_admin),
+) -> dict:
+    audio = await _service(database).replace_file(audio_id, file)
+    await _log(
+        database,
+        claims,
+        "REPLACE_FILE",
+        audio_id,
+        "Replaced audio file.",
+    )
+    return audio
+
+
+@router.patch("/audios/{audio_id}", response_model=AudioView)
 async def update_audio(
     audio_id: str,
     request: AudioUpdate,
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).update(audio_id, request.title)
-    await _log(database, claims, "UPDATE", audio_id, "Updated audio title.")
+    audio = await _service(database).update(
+        audio_id,
+        request.model_dump(exclude_unset=True, exclude_none=True),
+    )
+    await _log(database, claims, "UPDATE", audio_id, "Updated audio information.")
     return audio
 
 

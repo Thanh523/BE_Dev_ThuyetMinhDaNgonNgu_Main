@@ -20,6 +20,10 @@ Audio management uses the `PlaceAudios` collection, linked by `PlaceId` and
 50 MB by default. Files are stored under
 `backend/uploads/audio/<PlaceId>-<slug>` by default. The admin audio page
 provides audio upload and management without a text-to-speech form.
+Text narration follows the ERD in `Narrations` with `NarrationId`,
+`PlaceId`, `LanguageCode`, `Title`, and `Content`. `AudioFiles` references a
+narration through `NarrationId`; a narration with related audio cannot be
+deleted.
 
 Backend management code follows routes → controllers → services → repositories.
 Route modules aggregate and register endpoint routers; controllers handle HTTP
@@ -103,6 +107,10 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `GET` | `/api/admin/categories` | List categories |
 | `POST` | `/api/admin/categories` | Create a category |
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
+| `GET` | `/api/admin/places/{place_id}/narrations` | List narration text for a place |
+| `POST` | `/api/admin/places/{place_id}/narrations` | Create narration text |
+| `PATCH` | `/api/admin/narrations/{narration_id}` | Update narration text |
+| `DELETE` | `/api/admin/narrations/{narration_id}` | Delete narration without audio references |
 | `DELETE` | `/api/admin/categories/{category_id}` | Delete an unused category |
 | `GET` | `/api/admin/users` | Search and page user accounts (never returns password hashes) |
 | `PATCH` | `/api/admin/users/{user_id}` | Update a user's name and email |

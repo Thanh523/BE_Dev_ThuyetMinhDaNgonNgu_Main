@@ -134,6 +134,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await database[settings.saved_places_collection].create_index(
             [("UserId", ASCENDING), ("SavedAt", DESCENDING)],
         )
+        await database[settings.saved_places_collection].create_index(
+            [("PlaceId", ASCENDING), ("SavedAt", DESCENDING)],
+        )
         await database[settings.listening_history_collection].create_index(
             [("ListeningHistoryId", ASCENDING)],
             unique=True,

@@ -16,6 +16,10 @@ class AudioControllerTests(unittest.TestCase):
             ("POST", "/api/admin/places/{place_id}/audios/upload"),
             routes,
         )
+        self.assertIn(
+            ("PATCH", "/api/admin/audios/{audio_id}/narration"),
+            routes,
+        )
 
     def test_audio_responses_use_database_field_aliases(self):
         response_routes = [
@@ -45,6 +49,7 @@ class AudioControllerTests(unittest.TestCase):
         self.assertIn("AudioId", payload)
         self.assertIn("FileUrl", payload)
         self.assertIn("DurationSeconds", payload)
+        self.assertIsNone(payload["NarrationId"])
 
 
 if __name__ == "__main__":

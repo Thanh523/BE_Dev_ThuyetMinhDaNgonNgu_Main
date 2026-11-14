@@ -16,14 +16,13 @@ or a category referenced by places, is rejected rather than cascading.
 Creating a place also creates an image folder under `backend/uploads/images`
 named `<PlaceId>-<slug>`; uploaded images for that place are stored there.
 Audio management uses the `PlaceAudios` collection, linked by `PlaceId` and
-`Language`. Uploaded audio files are validated with `mutagen` and limited to
-50 MB by default. Files are stored under
+`Language`; an optional `NarrationId` links an audio file to the matching text
+narration. Uploaded audio files are validated with `mutagen` and limited to 50
+MB by default. Files are stored under
 `backend/uploads/audio/<PlaceId>-<slug>` by default. The admin audio page
 provides audio upload and management without a text-to-speech form.
 Text narration follows the ERD in `Narrations` with `NarrationId`,
-`PlaceId`, `LanguageCode`, `Title`, and `Content`. `AudioFiles` references a
-narration through `NarrationId`; a narration with related audio cannot be
-deleted.
+`PlaceId`, `LanguageCode`, `Title`, and `Content`.
 
 Backend management code follows routes → controllers → services → repositories.
 Route modules aggregate and register endpoint routers; controllers handle HTTP
@@ -42,6 +41,7 @@ them in the shell. For example:
 MONGODB_URI=mongodb+srv://<database-user>:<url-encoded-password>@<cluster-host>/?retryWrites=true&w=majority
 MONGODB_DATABASE=SaigonEcho
 JWT_KEY=<random-secret-at-least-32-characters>
+ONLINE_SESSION_TIMEOUT_MINUTES=5
 ```
 
 Generate a secret locally with
@@ -50,6 +50,9 @@ result in `JWT_KEY`; do not share or commit it. The built-in admin login signs
 JWTs using `JWT_ALGORITHM` (HS256 by default) that expire after 8 hours. For
 HS256, the secret must be at least 32 bytes. User registration and login use
 the same JWT key but issue user-role tokens distinct from admin tokens.
+Dashboard xem một tài khoản là đang online khi phiên chưa kết thúc và
+`LastSeenAt` nằm trong số phút cấu hình bởi `ONLINE_SESSION_TIMEOUT_MINUTES`
+(mặc định 5 phút).
 The application loads `atlas-credentials.env` automatically; existing process
 environment variables take precedence. From the `backend` directory, install
 dependencies, create the first admin, and start the API:
@@ -107,6 +110,11 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `GET` | `/api/admin/categories` | List categories |
 | `POST` | `/api/admin/categories` | Create a category |
 | `PATCH` | `/api/admin/categories/{category_id}` | Update a category name and description |
+| `GET` | `/api/admin/languages` | Search and list managed languages |
+| `POST` | `/api/admin/languages` | Add a language |
+| `PATCH` | `/api/admin/languages/{language_code}` | Update a language code or name |
+| `PATCH` | `/api/admin/languages/{language_code}/status` | Show or hide a language |
+| `DELETE` | `/api/admin/languages/{language_code}` | Delete an unreferenced language |
 | `GET` | `/api/admin/places/{place_id}/narrations` | List narration text for a place |
 | `GET` | `/api/admin/narration-languages` | List language codes available for narrations |
 | `POST` | `/api/admin/places/{place_id}/narrations` | Create narration text |
@@ -144,6 +152,7 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `POST` | `/api/admin/places/{place_id}/audios/upload` | Upload an audio file with multipart fields `file`, `language`, and optional title/voice |
 | `PUT` | `/api/admin/audios/{audio_id}/file` | Replace an audio file |
 | `PATCH` | `/api/admin/audios/{audio_id}` | Update title, language, voice name, or active status |
+| `PATCH` | `/api/admin/audios/{audio_id}/narration` | Link or unlink an audio file to a narration |
 | `DELETE` | `/api/admin/audios/{audio_id}` | Delete audio metadata and its stored file |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and

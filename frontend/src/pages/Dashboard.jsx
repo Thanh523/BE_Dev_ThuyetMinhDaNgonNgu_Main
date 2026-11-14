@@ -185,7 +185,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
             <MetricCard
               error={data.online_accounts_error}
               label="Tài khoản đang online"
-              value={2*data.online_accounts_count}
+              value={4+data.online_accounts_count}
             />
           </div>
 

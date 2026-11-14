@@ -35,6 +35,7 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             "visible",
             12,
             12,
+            True,
         )
         self.assertEqual(
             {"items": [{"PlaceId": 1}], "total": 1, "skip": 12, "limit": 12},

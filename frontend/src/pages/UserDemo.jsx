@@ -106,6 +106,7 @@ export default function UserDemo({ apiUrl }) {
   const [clearingListeningHistory, setClearingListeningHistory] = useState(false);
   const [pendingReplayAudioId, setPendingReplayAudioId] = useState(null);
   const audioElements = useRef(new Map());
+  const sessionId = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -116,6 +117,67 @@ export default function UserDemo({ apiUrl }) {
     setProfile(currentProfile);
     setProfileForm({ full_name: currentProfile.FullName });
   }, [apiUrl]);
+
+  // Tạo phiên hoạt động và gửi heartbeat để Dashboard nhận diện tài khoản đang online.
+  useEffect(() => {
+    if (!token) {
+      sessionId.current = null;
+      return undefined;
+    }
+
+    let active = true;
+    let heartbeat;
+    userRequest(apiUrl, token, "/api/user/sessions", { method: "POST" })
+      .then((session) => {
+        if (!active) {
+          return;
+        }
+        sessionId.current = session.SessionId;
+        heartbeat = window.setInterval(() => {
+          if (!sessionId.current) {
+            return;
+          }
+          userRequest(
+            apiUrl,
+            token,
+            `/api/user/sessions/${encodeURIComponent(sessionId.current)}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({ end_session: false }),
+            },
+          ).catch(() => {
+            // Dashboard sẽ tự loại phiên nếu heartbeat không còn được gửi.
+          });
+        }, 60 * 1000);
+      })
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+        }
+      });
+
+    return () => {
+      active = false;
+      if (heartbeat) {
+        window.clearInterval(heartbeat);
+      }
+      const currentSessionId = sessionId.current;
+      sessionId.current = null;
+      if (currentSessionId) {
+        userRequest(
+          apiUrl,
+          token,
+          `/api/user/sessions/${encodeURIComponent(currentSessionId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ end_session: true }),
+          },
+        ).catch(() => {
+          // Phiên hết hạn theo timeout nếu trình duyệt đã đóng hoặc mất mạng.
+        });
+      }
+    };
+  }, [apiUrl, token]);
 
   const loadListeningHistory = useCallback((activeToken, skip) => userRequest(
     apiUrl,
@@ -1014,6 +1076,18 @@ export default function UserDemo({ apiUrl }) {
                     {placeDetails.place.Description}
                   </p>
                 )}
+                <div className="user-place-narrations">
+                  <h3>Nội dung thuyết minh</h3>
+                  {(placeDetails.narrations ?? []).map((narration) => (
+                    <article className="user-place-narration" key={narration.NarrationId}>
+                      <div className="user-place-narration-heading">
+                        <strong>{narration.Title}</strong>
+                        <span>{narration.LanguageCode}</span>
+                      </div>
+                      <p>{narration.Content}</p>
+                    </article>
+                  ))}
+                </div>
                 {placeDetails.images.length > 0 ? (
                   <div className="user-place-image-grid">
                     {placeDetails.images.map((image) => (

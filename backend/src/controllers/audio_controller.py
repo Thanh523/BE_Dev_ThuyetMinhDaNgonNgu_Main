@@ -27,6 +27,10 @@ class AudioUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class AudioNarrationLink(BaseModel):
+    narration_id: int | None = None
+
+
 class AudioView(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -43,6 +47,7 @@ class AudioView(BaseModel):
     voice_name: str = Field(default="", alias="VoiceName")
     duration_seconds: int = Field(default=0, alias="DurationSeconds")
     is_active: bool = Field(default=True, alias="IsActive")
+    narration_id: int | None = Field(default=None, alias="NarrationId")
 
 
 def _service(database) -> AudioService:
@@ -52,6 +57,7 @@ def _service(database) -> AudioService:
             database,
             settings.places_collection,
             settings.audio_collection,
+            settings.narrations_collection,
         ),
         settings,
     )
@@ -142,6 +148,18 @@ async def update_audio(
         request.model_dump(exclude_unset=True, exclude_none=True),
     )
     await _log(database, claims, "UPDATE", audio_id, "Updated audio information.")
+    return audio
+
+
+@router.patch("/audios/{audio_id}/narration", response_model=AudioView)
+async def link_audio_narration(
+    audio_id: str,
+    request: AudioNarrationLink,
+    database=Depends(get_database),
+    claims: dict = Depends(require_admin),
+) -> dict:
+    audio = await _service(database).link_narration(audio_id, request.narration_id)
+    await _log(database, claims, "LINK_NARRATION", audio_id, "Updated audio narration link.")
     return audio
 
 

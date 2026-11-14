@@ -294,6 +294,36 @@ class AudioService:
             raise HTTPException(status_code=404, detail="Audio was not found.")
         return updated
 
+    async def link_narration(self, audio_id: str, narration_id: int | None) -> dict:
+        audio = await self._get(audio_id)
+        try:
+            if narration_id is not None:
+                narration = await self.repository.get_narration(narration_id)
+                if narration is None:
+                    raise HTTPException(status_code=404, detail="Narration was not found.")
+                if (
+                    narration.get("PlaceId") != audio.get("PlaceId")
+                    or narration.get("LanguageCode") != audio.get("Language")
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Audio and narration must use the same place and language.",
+                    )
+                if await self.repository.has_narration_audio(narration_id, audio_id):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="This narration already has another audio file.",
+                    )
+            result = await self.repository.link_narration(audio_id, narration_id)
+        except PyMongoError as error:
+            raise HTTPException(
+                status_code=503,
+                detail="Audio narration link could not be updated.",
+            ) from error
+        if result is None:
+            raise HTTPException(status_code=404, detail="Audio was not found.")
+        return result
+
     async def replace_file(self, audio_id: str, upload: UploadFile) -> dict:
         audio = await self._get(audio_id)
         place = await self._get_place(audio["PlaceId"])

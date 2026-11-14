@@ -33,13 +33,24 @@ class NarrationRepository:
 
     async def language_exists(self, language_code: str) -> bool:
         return await self.languages.find_one(
-            {"LanguageCode": language_code},
+            {
+                "LanguageCode": language_code,
+                "$or": [
+                    {"IsActive": True},
+                    {"IsActive": {"$exists": False}},
+                ],
+            },
             {"_id": 1},
         ) is not None
 
     async def list_languages(self) -> list[dict]:
         cursor = self.languages.find(
-            {},
+            {
+                "$or": [
+                    {"IsActive": True},
+                    {"IsActive": {"$exists": False}},
+                ],
+            },
             {"_id": 0, "LanguageCode": 1, "LanguageName": 1},
         ).sort("LanguageCode", 1)
         return await cursor.to_list(length=None)

@@ -60,6 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     "$setOnInsert": {
                         "LanguageCode": language_code,
                         "LanguageName": language_name,
+                        "IsActive": True,
                     }
                 },
                 upsert=True,

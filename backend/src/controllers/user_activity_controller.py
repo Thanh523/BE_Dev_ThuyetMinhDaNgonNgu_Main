@@ -118,6 +118,7 @@ async def list_user_places(
         "visible",
         skip,
         limit,
+        True,
     )
     return {"items": items, "total": total, "skip": skip, "limit": limit}
 

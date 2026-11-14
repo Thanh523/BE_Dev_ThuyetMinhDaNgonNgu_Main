@@ -63,6 +63,7 @@ class Settings:
     usage_events_collection: str = "UsageEvents"
     max_image_size_bytes: int = 10 * 1024 * 1024
     max_audio_size_bytes: int = 50 * 1024 * 1024
+    online_session_timeout_minutes: int = 5
 
 
 def get_settings() -> Settings:
@@ -132,5 +133,8 @@ def get_settings() -> Settings:
         ),
         max_audio_size_bytes=int(
             os.getenv("MAX_AUDIO_SIZE_BYTES", str(50 * 1024 * 1024))
+        ),
+        online_session_timeout_minutes=int(
+            os.getenv("ONLINE_SESSION_TIMEOUT_MINUTES", "5")
         ),
     )

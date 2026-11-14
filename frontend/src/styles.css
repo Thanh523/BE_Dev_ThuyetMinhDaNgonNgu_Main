@@ -2133,6 +2133,75 @@ body {
   border-top: 3px solid var(--green);
 }
 
+.guest-access-note {
+  margin: -4px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #dfece0;
+  border-radius: 10px;
+  color: var(--ink-soft);
+  background: var(--sage-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.user-login-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+  background: rgb(18 32 26 / 54%);
+  backdrop-filter: blur(4px);
+}
+
+.user-login-modal {
+  position: relative;
+  width: min(100%, 460px);
+  padding: 30px;
+  border: 1px solid #e4ebe3;
+  border-radius: 20px;
+  outline: 0;
+  background: var(--paper);
+  box-shadow: 0 24px 70px rgb(15 31 24 / 26%);
+}
+
+.user-login-modal h2 {
+  margin: 8px 36px 10px 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 26px;
+}
+
+.user-login-modal > p:not(.eyebrow) {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.user-login-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink-soft);
+  background: #edf2eb;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.user-login-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
 .button {
   border-color: var(--green);
   border-radius: 10px;
@@ -2217,5 +2286,13 @@ body {
 
   .user-account-menu {
     right: -4px;
+  }
+
+  .user-login-modal {
+    padding: 24px;
+  }
+
+  .user-login-modal-actions {
+    flex-direction: column;
   }
 }

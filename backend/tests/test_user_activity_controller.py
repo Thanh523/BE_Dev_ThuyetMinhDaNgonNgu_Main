@@ -6,8 +6,11 @@ from src.controllers.user_activity_controller import (
     delete_listening_history_entry,
     get_user_place_details,
     list_user_categories,
+    list_user_place_audios,
     list_user_places,
+    router,
 )
+from src.middlewares.user_auth import require_user
 
 
 class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
@@ -26,7 +29,6 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             skip=12,
             limit=12,
             database=object(),
-            claims={"UserId": "user-1"},
         )
 
         place_service.list_places.assert_awaited_once_with(
@@ -54,7 +56,6 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
 
         result = await list_user_categories(
             database=object(),
-            claims={"UserId": "user-1"},
         )
 
         service.list_visible_categories.assert_awaited_once_with()
@@ -78,11 +79,51 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
         result = await get_user_place_details(
             place_id=1,
             database=object(),
-            claims={"UserId": "user-1"},
         )
 
         service.get_place_details.assert_awaited_once_with(1)
         self.assertEqual(details, result)
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_guest_audio_listing_returns_active_audio(
+        self,
+        service_factory,
+    ):
+        service = Mock()
+        audios = [{"AudioId": "audio-1"}]
+        service.list_place_audios = AsyncMock(return_value=audios)
+        service_factory.return_value = service
+
+        result = await list_user_place_audios(place_id=1, database=object())
+
+        service.list_place_audios.assert_awaited_once_with(1)
+        self.assertEqual(audios, result)
+
+    def test_guest_browse_routes_are_public_but_personal_routes_require_login(self):
+        routes = {
+            (method, route.path): route
+            for route in router.routes
+            for method in (route.methods or set())
+        }
+        public_routes = (
+            ("GET", "/api/user/places"),
+            ("GET", "/api/user/categories"),
+            ("GET", "/api/user/places/{place_id}"),
+            ("GET", "/api/user/places/{place_id}/audios"),
+        )
+        for key in public_routes:
+            with self.subTest(route=key):
+                dependencies = routes[key].dependant.dependencies
+                self.assertFalse(any(
+                    dependency.call is require_user
+                    for dependency in dependencies
+                ))
+
+        personal_route = routes[("GET", "/api/user/saved-places")]
+        self.assertTrue(any(
+            dependency.call is require_user
+            for dependency in personal_route.dependant.dependencies
+        ))
 
     @patch("src.controllers.user_activity_controller._service")
     async def test_delete_history_entry_uses_authenticated_user(

@@ -76,6 +76,7 @@ export default function UserDemo({ apiUrl }) {
   const [changingPassword, setChangingPassword] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [accountPanel, setAccountPanel] = useState(null);
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     current_password: "",
     new_password: "",
@@ -108,10 +109,17 @@ export default function UserDemo({ apiUrl }) {
   const [clearingListeningHistory, setClearingListeningHistory] = useState(false);
   const [pendingReplayAudioId, setPendingReplayAudioId] = useState(null);
   const audioElements = useRef(new Map());
+  const loginPromptRef = useRef(null);
   const sessionId = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    if (loginPromptOpen) {
+      loginPromptRef.current?.focus();
+    }
+  }, [loginPromptOpen]);
 
   // Tải dữ liệu cá nhân bằng token user; API tự giới hạn dữ liệu theo tài khoản.
   const refreshActivity = useCallback(async (activeToken) => {
@@ -286,14 +294,6 @@ export default function UserDemo({ apiUrl }) {
   // Chỉ tìm khi submit; cờ active bỏ qua kết quả cũ nếu user đổi trang hoặc bộ lọc.
   // Gửi category_id cùng truy vấn để backend lọc trước khi phân trang.
   useEffect(() => {
-    if (!token) {
-      setPlaces([]);
-      setPlacesTotal(0);
-      setPlacesSkip(0);
-      setPlaceCategories([]);
-      return undefined;
-    }
-
     let active = true;
     const params = new URLSearchParams({
       search: submittedPlaceSearch,
@@ -408,6 +408,19 @@ export default function UserDemo({ apiUrl }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function requireLogin() {
+    setLoginPromptOpen(true);
+  }
+
+  function goToLogin() {
+    setLoginPromptOpen(false);
+    window.setTimeout(() => {
+      const authPanel = document.querySelector(".user-auth-panel");
+      authPanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+      authPanel?.querySelector('input[type="email"]')?.focus();
+    }, 0);
   }
 
   async function toggleSavedPlace(place) {
@@ -691,18 +704,12 @@ export default function UserDemo({ apiUrl }) {
     );
   }
 
-  // Nếu admin khóa user ở nơi khác, yêu cầu API kế tiếp sẽ thu hồi phiên demo này.
+  // Danh mục và địa điểm visible được phép xem ở chế độ khách.
   useEffect(() => {
-    if (!token) {
-      return;
-    }
     let active = true;
     setCategoriesLoading(true);
-    Promise.all([
-      refreshActivity(token),
-      userRequest(apiUrl, token, "/api/user/categories"),
-    ])
-      .then(([, categories]) => {
+    userRequest(apiUrl, "", "/api/user/categories")
+      .then((categories) => {
         if (active) {
           setPlaceCategories(categories);
         }
@@ -710,12 +717,30 @@ export default function UserDemo({ apiUrl }) {
       .catch((requestError) => {
         if (active) {
           setError(requestError.message);
-          setToken("");
         }
       })
       .finally(() => {
         if (active) {
           setCategoriesLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiUrl]);
+
+  // Nếu admin khóa user ở nơi khác, yêu cầu API kế tiếp sẽ thu hồi phiên demo này.
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+    let active = true;
+    refreshActivity(token)
+      .catch((requestError) => {
+        if (active) {
+          setError(requestError.message);
+          setToken("");
         }
       });
     return () => {
@@ -726,14 +751,20 @@ export default function UserDemo({ apiUrl }) {
   return (
     <section className="user-demo">
       {!token ? (
-        <section className="panel">
+        <section className="panel user-auth-panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">USER SELF-SERVICE</p>
-              <h2>{authMode === "login" ? "Đăng nhập người dùng" : "Tạo tài khoản user"}</h2>
+              <p className="eyebrow">CHẾ ĐỘ KHÁCH</p>
+              <h2>{authMode === "login" ? "Bạn đang khám phá với tư cách khách" : "Tạo tài khoản user"}</h2>
             </div>
-            <span className="status-pill">Demo user</span>
+            <span className="status-pill">Không cần đăng nhập</span>
           </div>
+          {authMode === "login" && (
+            <p className="guest-access-note">
+              Bạn có thể xem địa điểm, đọc thuyết minh và nghe audio ngay bây giờ.
+              Đăng nhập khi muốn lưu địa điểm hoặc xem lịch sử nghe.
+            </p>
+          )}
           <form className="user-demo-form" onSubmit={submitAuth}>
             {authMode === "register" && (
               <label>
@@ -1054,8 +1085,11 @@ export default function UserDemo({ apiUrl }) {
               </form>
             )}
           </section>
-            </>
+          </>
           )}
+
+          </>
+        )}
 
           <section className="panel">
             <div className="section-heading">
@@ -1136,6 +1170,25 @@ export default function UserDemo({ apiUrl }) {
                     {placeDetails.place.Description}
                   </p>
                 )}
+                {(placeDetails.images ?? []).length > 0 && (
+                  <section
+                    aria-label={`Ảnh ${placeDetails.place.PlaceName}`}
+                    className="user-place-image-grid"
+                  >
+                    {placeDetails.images.map((image) => (
+                      <figure key={image.ImageId}>
+                        <img
+                          alt={image.Caption || placeDetails.place.PlaceName}
+                          src={new URL(
+                            image.FileUrl,
+                            `${apiUrl.replace(/\/+$/, "")}/`,
+                          ).toString()}
+                        />
+                        {image.Caption && <figcaption>{image.Caption}</figcaption>}
+                      </figure>
+                    ))}
+                  </section>
+                )}
                 <div className="user-place-narrations">
                   <h3>Nội dung thuyết minh</h3>
                   {(placeDetails.narrations ?? []).map((narration) => (
@@ -1163,15 +1216,21 @@ export default function UserDemo({ apiUrl }) {
                         : ""
                     }`}
                     disabled={busy}
-                    onClick={() => toggleSavedPlace(placeDetails.place)}
+                    onClick={() => (
+                      token
+                        ? toggleSavedPlace(placeDetails.place)
+                        : requireLogin()
+                    )}
                     type="button"
                   >
-                    {savedPlaces.some(
-                      (item) => Number(item.PlaceId)
-                        === Number(placeDetails.place.PlaceId),
-                    )
-                      ? "Đã lưu · Bỏ lưu"
-                      : "Lưu địa điểm"}
+                    {!token
+                      ? "Đăng nhập để lưu"
+                      : savedPlaces.some(
+                        (item) => Number(item.PlaceId)
+                          === Number(placeDetails.place.PlaceId),
+                      )
+                        ? "Đã lưu · Bỏ lưu"
+                        : "Lưu địa điểm"}
                   </button>
                 </div>
                 <div className="user-place-detail-audios">
@@ -1249,10 +1308,14 @@ export default function UserDemo({ apiUrl }) {
                           aria-pressed={isSaved}
                           className={`button ${isSaved ? "button-outline" : ""}`}
                           disabled={busy}
-                          onClick={() => toggleSavedPlace(place)}
+                          onClick={() => (token ? toggleSavedPlace(place) : requireLogin())}
                           type="button"
                         >
-                          {isSaved ? "Đã lưu · Bỏ lưu" : "Lưu địa điểm"}
+                          {!token
+                            ? "Đăng nhập để lưu"
+                            : isSaved
+                              ? "Đã lưu · Bỏ lưu"
+                              : "Lưu địa điểm"}
                         </button>
                         <button
                           className="text-button"
@@ -1303,11 +1366,11 @@ export default function UserDemo({ apiUrl }) {
             )}
           </section>
 
-          {(accountPanel === "saved" || accountPanel === "history") && (
+          {token && (accountPanel === "saved" || accountPanel === "history") && (
           <section className="user-demo-grid user-account-content">
             <section className="panel">
               {accountPanel === "saved" ? (
-              <>
+              <div>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">SAVED PLACES</p>
@@ -1369,9 +1432,9 @@ export default function UserDemo({ apiUrl }) {
                   </button>
                 </div>
               )}
-              </>
+              </div>
               ) : (
-              <>
+              <div>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">LISTENING HISTORY</p>
@@ -1487,16 +1550,65 @@ export default function UserDemo({ apiUrl }) {
                   </button>
                 </div>
               )}
-              </>
+              </div>
               )}
             </section>
           </section>
           )}
-        </>
-      )}
 
       {error && <div className="message message-error" role="alert">{error}</div>}
       {notice && !error && <div className="message message-success" role="status">{notice}</div>}
+      {loginPromptOpen && (
+        <div
+          className="user-login-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setLoginPromptOpen(false);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setLoginPromptOpen(false);
+            }
+          }}
+        >
+          <section
+            aria-labelledby="guest-login-title"
+            aria-modal="true"
+            className="user-login-modal"
+            ref={loginPromptRef}
+            role="dialog"
+            tabIndex={-1}
+          >
+            <button
+              aria-label="Đóng thông báo đăng nhập"
+              className="user-login-modal-close"
+              onClick={() => setLoginPromptOpen(false)}
+              type="button"
+            >
+              ×
+            </button>
+            <p className="eyebrow">SAIGON ECHO · TÀI KHOẢN</p>
+            <h2 id="guest-login-title">Đăng nhập để lưu địa điểm</h2>
+            <p>
+              Bạn vẫn có thể tiếp tục khám phá và nghe thuyết minh với tư cách khách.
+              Đăng nhập hoặc tạo tài khoản để lưu địa điểm yêu thích.
+            </p>
+            <div className="user-login-modal-actions">
+              <button className="button" onClick={goToLogin} type="button">
+                Đăng nhập hoặc đăng ký
+              </button>
+              <button
+                className="button button-outline"
+                onClick={() => setLoginPromptOpen(false)}
+                type="button"
+              >
+                Tiếp tục khám phá
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

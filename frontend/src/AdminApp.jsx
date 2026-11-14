@@ -31,7 +31,6 @@ const adminPages = [
 export default function AdminApp() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
   const [token, setToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -46,10 +45,6 @@ export default function AdminApp() {
     event.preventDefault();
     setError("");
     setNotice("");
-    if (!apiUrl.trim()) {
-      setError("Vui lòng nhập địa chỉ backend.");
-      return;
-    }
     if (!username.trim() || !password) {
       setError("Nhập username và mật khẩu admin.");
       return;
@@ -57,7 +52,7 @@ export default function AdminApp() {
 
     setLoading(true);
     try {
-      const baseUrl = apiUrl.replace(/\/+$/, "");
+      const baseUrl = DEFAULT_API_URL.replace(/\/+$/, "");
       const requestUrls = [
         `${baseUrl}/api/admin/auth/login`,
         `${baseUrl.replace(
@@ -132,13 +127,18 @@ export default function AdminApp() {
   return (
     <main className="page-shell admin-shell">
       <header className="page-header">
-        <div className="brand-mark" aria-hidden="true">SE</div>
-        <div>
-          <p className="eyebrow">SAIGON ECHO · ADMIN</p>
-          <h1>Hệ thống quản trị</h1>
-          <p className="subtitle">Quản lý nội dung, địa điểm và hoạt động người dùng.</p>
+        <div className="brand-lockup">
+          <div className="brand-mark" aria-hidden="true">SE</div>
+          <div>
+            <p className="eyebrow">SAIGON ECHO · STUDIO</p>
+            <strong className="brand-name">Bảng điều khiển</strong>
+          </div>
         </div>
-        <NavLink className="portal-link" to="/user">Trang User</NavLink>
+        <div className="admin-header-copy">
+          <p className="eyebrow">KHÔNG GIAN QUẢN TRỊ</p>
+          <h1>Điều hành nội dung thành phố</h1>
+          <p className="subtitle">Quản lý địa điểm, audio và trải nghiệm người nghe.</p>
+        </div>
       </header>
 
       {isLoginPage ? (
@@ -151,14 +151,6 @@ export default function AdminApp() {
             <span className="status-pill">Chưa đăng nhập</span>
           </div>
           <form className="admin-login-form" onSubmit={login}>
-            <label>
-              Địa chỉ backend
-              <input
-                onChange={(event) => setApiUrl(event.target.value)}
-                type="url"
-                value={apiUrl}
-              />
-            </label>
             <label>
               Username hoặc email
               <input
@@ -201,11 +193,11 @@ export default function AdminApp() {
             </button>
           </nav>
           {activePage === "dashboard" && (
-            <Dashboard apiUrl={apiUrl} setError={setError} token={normalizedAuthToken} />
+            <Dashboard apiUrl={DEFAULT_API_URL} setError={setError} token={normalizedAuthToken} />
           )}
           {activePage === "places" && (
             <PlaceManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -213,7 +205,7 @@ export default function AdminApp() {
           )}
           {activePage === "placeimages" && (
             <ImageManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -221,7 +213,7 @@ export default function AdminApp() {
           )}
           {activePage === "categories" && (
             <CategoryManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -229,7 +221,7 @@ export default function AdminApp() {
           )}
           {activePage === "languages" && (
             <LanguageManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -237,7 +229,7 @@ export default function AdminApp() {
           )}
           {activePage === "users" && (
             <UserManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -245,7 +237,7 @@ export default function AdminApp() {
           )}
           {activePage === "audio" && (
             <AudioManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -253,7 +245,7 @@ export default function AdminApp() {
           )}
           {activePage === "narrations" && (
             <NarrationManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               setNotice={setNotice}
               token={normalizedAuthToken}
@@ -261,7 +253,7 @@ export default function AdminApp() {
           )}
           {activePage === "activity-logs" && (
             <ActivityLogManagement
-              apiUrl={apiUrl}
+              apiUrl={DEFAULT_API_URL}
               setError={setError}
               token={normalizedAuthToken}
             />

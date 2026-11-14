@@ -74,6 +74,8 @@ export default function UserDemo({ apiUrl }) {
   const [profileForm, setProfileForm] = useState({ full_name: "" });
   const [editingProfile, setEditingProfile] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountPanel, setAccountPanel] = useState(null);
   const [passwordForm, setPasswordForm] = useState({
     current_password: "",
     new_password: "",
@@ -808,6 +810,79 @@ export default function UserDemo({ apiUrl }) {
         </section>
       ) : (
         <>
+          <div className="user-account-bar">
+            <div className="user-account-welcome">
+              <span className="user-account-kicker">KHÔNG GIAN CỦA BẠN</span>
+              <strong>Xin chào, {profile?.FullName || "bạn"}!</strong>
+            </div>
+            <div className="user-account-menu-wrap">
+              <button
+                aria-expanded={accountMenuOpen}
+                aria-haspopup="menu"
+                className="user-avatar-button"
+                onClick={() => setAccountMenuOpen((current) => !current)}
+                type="button"
+              >
+                <span className="user-avatar" aria-hidden="true">
+                  {(profile?.FullName || profile?.Email || "?").slice(0, 1).toUpperCase()}
+                </span>
+                <span className="user-avatar-label">Tài khoản</span>
+                <span aria-hidden="true">⌄</span>
+              </button>
+              {accountMenuOpen && (
+                <div className="user-account-menu" role="menu">
+                  <button
+                    onClick={() => {
+                      setAccountPanel("profile");
+                      setAccountMenuOpen(false);
+                      setError("");
+                      setNotice("");
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span aria-hidden="true">◯</span>
+                    Sửa hồ sơ & bảo mật
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAccountPanel("saved");
+                      setAccountMenuOpen(false);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span aria-hidden="true">♡</span>
+                    Địa điểm đã lưu
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAccountPanel("history");
+                      setAccountMenuOpen(false);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span aria-hidden="true">◷</span>
+                    Lịch sử nghe
+                  </button>
+                  <div className="user-account-menu-divider" />
+                  <button
+                    className="user-account-menu-logout"
+                    onClick={logout}
+                    role="menuitem"
+                    type="button"
+                  >
+                    <span aria-hidden="true">↪</span>
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {accountPanel === "profile" && (
+            <>
           <section className="panel">
             <div className="section-heading">
               <div>
@@ -816,23 +891,6 @@ export default function UserDemo({ apiUrl }) {
               </div>
               <div className="user-demo-actions">
                 <span className="status-pill status-connected">Đã đăng nhập</span>
-                {!editingProfile && (
-                  <button
-                    className="button button-outline"
-                    onClick={() => {
-                      setProfileForm({ full_name: profile?.FullName ?? "" });
-                      setEditingProfile(true);
-                      setError("");
-                      setNotice("");
-                    }}
-                    type="button"
-                  >
-                    Sửa hồ sơ
-                  </button>
-                )}
-                <button className="button button-outline" onClick={logout} type="button">
-                  Đăng xuất
-                </button>
               </div>
             </div>
             {editingProfile ? (
@@ -996,6 +1054,8 @@ export default function UserDemo({ apiUrl }) {
               </form>
             )}
           </section>
+            </>
+          )}
 
           <section className="panel">
             <div className="section-heading">
@@ -1088,29 +1148,6 @@ export default function UserDemo({ apiUrl }) {
                     </article>
                   ))}
                 </div>
-                {placeDetails.images.length > 0 ? (
-                  <div className="user-place-image-grid">
-                    {placeDetails.images.map((image) => (
-                      <figure key={image.ImageId}>
-                        <img
-                          alt={image.Caption || placeDetails.place.PlaceName}
-                          loading="lazy"
-                          onError={(event) => {
-                            // Ẩn ảnh lỗi để URL hỏng không làm vỡ bố cục chi tiết.
-                            event.currentTarget.hidden = true;
-                          }}
-                          src={new URL(
-                            image.FileUrl,
-                            `${apiUrl.replace(/\/+$/, "")}/`,
-                          ).toString()}
-                        />
-                        {image.Caption && <figcaption>{image.Caption}</figcaption>}
-                      </figure>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="user-place-empty">Địa điểm chưa có hình ảnh.</p>
-                )}
                 <div className="user-place-detail-actions">
                   <button
                     aria-pressed={savedPlaces.some(
@@ -1266,8 +1303,11 @@ export default function UserDemo({ apiUrl }) {
             )}
           </section>
 
-          <section className="user-demo-grid">
+          {(accountPanel === "saved" || accountPanel === "history") && (
+          <section className="user-demo-grid user-account-content">
             <section className="panel">
+              {accountPanel === "saved" ? (
+              <>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">SAVED PLACES</p>
@@ -1329,9 +1369,9 @@ export default function UserDemo({ apiUrl }) {
                   </button>
                 </div>
               )}
-            </section>
-
-            <section className="panel">
+              </>
+              ) : (
+              <>
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">LISTENING HISTORY</p>
@@ -1382,11 +1422,6 @@ export default function UserDemo({ apiUrl }) {
                           || clearingListeningHistory
                         }
                         onClick={() => replayHistoryItem(item)}
-                        title={
-                          item.PlaceId && item.AudioId
-                            ? "Phát lại audio này"
-                            : "Lượt nghe này không còn audio để phát"
-                        }
                         type="button"
                       >
                         {replayingHistoryId === item.ListeningHistoryId
@@ -1452,8 +1487,11 @@ export default function UserDemo({ apiUrl }) {
                   </button>
                 </div>
               )}
+              </>
+              )}
             </section>
           </section>
+          )}
         </>
       )}
 

@@ -144,6 +144,26 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/uploads/audio/17-test-place/", audio["FileUrl"])
         self.assertTrue(self.stored_file(audio["FileUrl"]).exists())
 
+    async def test_translates_source_text_before_generating_audio(self):
+        async def fake_generate_tts(path, text, voice):
+            path.write_bytes(b"placeholder")
+
+        with patch("src.services.audio_service._generate_tts_audio", new=fake_generate_tts), \
+             patch("src.services.audio_service._audio_duration", return_value=8), \
+             patch("src.services.audio_service._translate_text", return_value="Hello there") as translate:
+            audio = await self.service.generate(
+                17,
+                "en",
+                "Xin chào",
+                source_text="Xin chào",
+                source_language="vi",
+                title="Greeting",
+            )
+
+        self.assertEqual("Xin chào", audio["SourceText"])
+        self.assertEqual("Hello there", audio["TranslatedText"])
+        translate.assert_called_once_with("Xin chào", "en", "vi")
+
     async def test_rejects_unsupported_extensions_and_invalid_audio_content(self):
         with self.assertRaises(HTTPException) as raised:
             await self.service.upload(

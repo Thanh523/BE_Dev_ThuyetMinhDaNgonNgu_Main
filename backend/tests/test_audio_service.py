@@ -4,6 +4,7 @@ import unittest
 import wave
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import HTTPException, UploadFile
 
@@ -121,6 +122,27 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("/uploads/audio/17-test-place/", audio["FileUrl"])
         self.assertTrue(self.stored_file(audio["FileUrl"]).is_file())
         self.assertEqual(audio, self.repository.documents[audio["AudioId"]])
+
+    async def test_generates_mp3_from_text_and_records_metadata(self):
+        async def fake_generate_tts(path, text, voice):
+            path.write_bytes(b"placeholder")
+
+        with patch("src.services.audio_service._generate_tts_audio", new=fake_generate_tts), \
+             patch("src.services.audio_service._audio_duration", return_value=12):
+            audio = await self.service.generate(
+                17,
+                "vi",
+                "Xin chào",
+                title="Mở đầu",
+                voice_name="vi-VN-HoaiMyNeural",
+            )
+
+        self.assertEqual("Mở đầu", audio["Title"])
+        self.assertEqual("Xin chào", audio["SourceText"])
+        self.assertEqual("vi-VN-HoaiMyNeural", audio["Voice"])
+        self.assertEqual(12, audio["DurationSeconds"])
+        self.assertIn("/uploads/audio/17-test-place/", audio["FileUrl"])
+        self.assertTrue(self.stored_file(audio["FileUrl"]).exists())
 
     async def test_rejects_unsupported_extensions_and_invalid_audio_content(self):
         with self.assertRaises(HTTPException) as raised:

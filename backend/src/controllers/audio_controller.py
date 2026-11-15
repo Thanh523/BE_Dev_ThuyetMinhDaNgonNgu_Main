@@ -20,6 +20,15 @@ router = APIRouter(
 )
 
 
+class AudioGenerateRequest(BaseModel):
+    language: str = Field(min_length=2, max_length=10)
+    title: str = Field(default="", min_length=0, max_length=200)
+    text: str | None = Field(default=None, min_length=1, max_length=100000)
+    source_text: str | None = Field(default=None, min_length=1, max_length=100000)
+    translated_text: str | None = Field(default=None, min_length=0, max_length=100000)
+    voice_name: str | None = Field(default=None, min_length=1, max_length=100)
+
+
 class AudioUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     language: str | None = Field(default=None, min_length=2, max_length=10)
@@ -76,6 +85,36 @@ async def _log(database, claims: dict, action: str, audio_id: str, description: 
 @router.get("/places/{place_id}/audios", response_model=list[AudioView])
 async def list_audios(place_id: str, database=Depends(get_database)) -> list[dict]:
     return await _service(database).list_for_place(parse_place_id(place_id))
+
+
+@router.post(
+    "/places/{place_id}/audios",
+    response_model=AudioView,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_audio(
+    place_id: str,
+    request: AudioGenerateRequest,
+    database=Depends(get_database),
+    claims: dict = Depends(require_admin),
+) -> dict:
+    audio = await _service(database).generate(
+        parse_place_id(place_id),
+        request.language,
+        request.text or request.source_text or "",
+        request.title,
+        request.voice_name,
+        request.source_text,
+        request.translated_text,
+    )
+    await _log(
+        database,
+        claims,
+        "GENERATE",
+        audio["AudioId"],
+        f"Generated audio for place {audio['PlaceId']}.",
+    )
+    return audio
 
 
 @router.post(

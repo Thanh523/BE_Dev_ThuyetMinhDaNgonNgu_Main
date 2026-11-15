@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getLocaleFormat,
+  translateUserText,
+  USER_LANGUAGES,
+} from "../i18n/userTranslations.js";
 
 const PLACE_PAGE_LIMIT = 12;
 const SAVED_PLACES_PAGE_LIMIT = 10;
@@ -54,15 +59,31 @@ async function userRequest(apiUrl, token, path, options = {}) {
   return payload;
 }
 
-function formatDate(value) {
+function formatDate(value, locale) {
   if (!value) {
     return "—";
   }
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN");
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleString(getLocaleFormat(locale));
 }
 
-export default function UserDemo({ apiUrl }) {
+function localizedField(item, locale, field) {
+  return item?.Translations?.[locale]?.[field] || item?.[field] || "";
+}
+
+function audioLanguageCode(audio) {
+  const language = USER_LANGUAGES.find((item) => (
+    item.code === audio.Language
+    || item.nativeName === audio.Language
+    || item.name === audio.Language
+  ));
+  return language?.code || audio.Language;
+}
+
+export default function UserDemo({ apiUrl, locale = "vi" }) {
+  const t = (text, values) => translateUserText(locale, text, values);
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({
     full_name: "",
@@ -95,6 +116,7 @@ export default function UserDemo({ apiUrl }) {
   const [placeDetails, setPlaceDetails] = useState(null);
   const [loadingPlaceDetailsId, setLoadingPlaceDetailsId] = useState(null);
   const [audiosByPlace, setAudiosByPlace] = useState({});
+  const [audioLanguage, setAudioLanguage] = useState(locale);
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [savedPlacesTotal, setSavedPlacesTotal] = useState(0);
   const [savedPlacesSkip, setSavedPlacesSkip] = useState(0);
@@ -114,6 +136,10 @@ export default function UserDemo({ apiUrl }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setAudioLanguage(locale);
+  }, [locale]);
 
   useEffect(() => {
     if (loginPromptOpen) {
@@ -551,7 +577,7 @@ export default function UserDemo({ apiUrl }) {
         [details.place.PlaceId]: details.audios,
       }));
       setPendingReplayAudioId(audio.AudioId);
-      setNotice(`Đang phát lại "${audio.Title}".`);
+      setNotice(t("Đang phát lại “{title}”.", { title: audio.Title }));
     } catch (requestError) {
       setError(
         requestError.status === 404
@@ -564,7 +590,7 @@ export default function UserDemo({ apiUrl }) {
   }
 
   async function deleteListeningHistoryEntry(item) {
-    if (!window.confirm("Xóa lượt nghe này khỏi lịch sử?")) {
+    if (!window.confirm(t("Xóa lượt nghe này khỏi lịch sử?"))) {
       return;
     }
 
@@ -599,7 +625,7 @@ export default function UserDemo({ apiUrl }) {
   }
 
   async function clearListeningHistory() {
-    if (!window.confirm("Xóa toàn bộ lịch sử nghe? Thao tác này không thể hoàn tác.")) {
+    if (!window.confirm(t("Xóa toàn bộ lịch sử nghe? Thao tác này không thể hoàn tác."))) {
       return;
     }
 
@@ -650,8 +676,10 @@ export default function UserDemo({ apiUrl }) {
       setListeningHistoryRefresh((current) => current + 1);
       setNotice(
         completed
-          ? `Đã nghe xong "${audio.Title}", lịch sử đã được lưu.`
-          : `Đã lưu tiến độ nghe "${audio.Title}".`,
+          ? t("Đã nghe xong “{title}”, lịch sử đã được lưu.", {
+            title: audio.Title,
+          })
+          : t("Đã lưu tiến độ nghe “{title}”.", { title: audio.Title }),
       );
       setError("");
     } catch (requestError) {
@@ -667,7 +695,9 @@ export default function UserDemo({ apiUrl }) {
             [audio.PlaceId]: currentAudios,
           }));
           setError(
-            `Audio "${audio.Title}" không còn hoạt động; danh sách audio đã được làm mới.`,
+            t("Audio “{title}” không còn hoạt động; danh sách audio đã được làm mới.", {
+              title: audio.Title,
+            }),
           );
         } catch (refreshError) {
           setError(refreshError.message);
@@ -754,21 +784,24 @@ export default function UserDemo({ apiUrl }) {
         <section className="panel user-auth-panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">CHẾ ĐỘ KHÁCH</p>
-              <h2>{authMode === "login" ? "Bạn đang khám phá với tư cách khách" : "Tạo tài khoản user"}</h2>
+              <p className="eyebrow">{t("CHẾ ĐỘ KHÁCH")}</p>
+              <h2>
+                {authMode === "login"
+                  ? t("Bạn đang khám phá với tư cách khách")
+                  : t("Tạo tài khoản user")}
+              </h2>
             </div>
-            <span className="status-pill">Không cần đăng nhập</span>
+            <span className="status-pill">{t("Không cần đăng nhập")}</span>
           </div>
           {authMode === "login" && (
             <p className="guest-access-note">
-              Bạn có thể xem địa điểm, đọc thuyết minh và nghe audio ngay bây giờ.
-              Đăng nhập khi muốn lưu địa điểm hoặc xem lịch sử nghe.
+              {t("Bạn có thể xem địa điểm, đọc thuyết minh và nghe audio ngay bây giờ. Đăng nhập khi muốn lưu địa điểm hoặc xem lịch sử nghe.")}
             </p>
           )}
           <form className="user-demo-form" onSubmit={submitAuth}>
             {authMode === "register" && (
               <label>
-                Họ tên
+                {t("Họ tên")}
                 <input
                   autoComplete="name"
                   maxLength={200}
@@ -782,7 +815,7 @@ export default function UserDemo({ apiUrl }) {
               </label>
             )}
             <label>
-              Email
+              {t("Email")}
               <input
                 autoComplete="email"
                 maxLength={254}
@@ -796,7 +829,7 @@ export default function UserDemo({ apiUrl }) {
               />
             </label>
             <label>
-              Mật khẩu {authMode === "register" && "(12-128 ký tự)"}
+              {t("Mật khẩu")} {authMode === "register" && t("(12-128 ký tự)")}
               <input
                 autoComplete={authMode === "register" ? "new-password" : "current-password"}
                 maxLength={128}
@@ -813,10 +846,10 @@ export default function UserDemo({ apiUrl }) {
             <div className="user-demo-actions">
               <button className="button" disabled={busy} type="submit">
                 {busy
-                  ? "Đang xử lý..."
+                  ? t("Đang xử lý...")
                   : authMode === "login"
-                    ? "Đăng nhập"
-                    : "Đăng ký"}
+                    ? t("Đăng nhập")
+                    : t("Đăng ký")}
               </button>
               <button
                 className="button button-outline"
@@ -830,21 +863,22 @@ export default function UserDemo({ apiUrl }) {
                 }}
                 type="button"
               >
-                {authMode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
+                {authMode === "login"
+                  ? t("Chưa có tài khoản? Đăng ký")
+                  : t("Đã có tài khoản? Đăng nhập")}
               </button>
             </div>
           </form>
           <p className="hint">
-            Demo gọi API backend; JWT user chỉ lưu trong bộ nhớ trang và không
-            được dùng để truy cập chức năng admin.
+            {t("Demo gọi API backend; JWT user chỉ lưu trong bộ nhớ trang và không được dùng để truy cập chức năng admin.")}
           </p>
         </section>
       ) : (
         <>
           <div className="user-account-bar">
             <div className="user-account-welcome">
-              <span className="user-account-kicker">KHÔNG GIAN CỦA BẠN</span>
-              <strong>Xin chào, {profile?.FullName || "bạn"}!</strong>
+              <span className="user-account-kicker">{t("KHÔNG GIAN CỦA BẠN")}</span>
+              <strong>{t("Xin chào, {name}!", { name: profile?.FullName || t("bạn") })}</strong>
             </div>
             <div className="user-account-menu-wrap">
               <button
@@ -857,7 +891,7 @@ export default function UserDemo({ apiUrl }) {
                 <span className="user-avatar" aria-hidden="true">
                   {(profile?.FullName || profile?.Email || "?").slice(0, 1).toUpperCase()}
                 </span>
-                <span className="user-avatar-label">Tài khoản</span>
+                <span className="user-avatar-label">{t("Tài khoản")}</span>
                 <span aria-hidden="true">⌄</span>
               </button>
               {accountMenuOpen && (
@@ -873,7 +907,7 @@ export default function UserDemo({ apiUrl }) {
                     type="button"
                   >
                     <span aria-hidden="true">◯</span>
-                    Sửa hồ sơ & bảo mật
+                    {t("Sửa hồ sơ & bảo mật")}
                   </button>
                   <button
                     onClick={() => {
@@ -884,7 +918,7 @@ export default function UserDemo({ apiUrl }) {
                     type="button"
                   >
                     <span aria-hidden="true">♡</span>
-                    Địa điểm đã lưu
+                    {t("Địa điểm đã lưu")}
                   </button>
                   <button
                     onClick={() => {
@@ -895,7 +929,7 @@ export default function UserDemo({ apiUrl }) {
                     type="button"
                   >
                     <span aria-hidden="true">◷</span>
-                    Lịch sử nghe
+                    {t("Lịch sử nghe")}
                   </button>
                   <div className="user-account-menu-divider" />
                   <button
@@ -905,7 +939,7 @@ export default function UserDemo({ apiUrl }) {
                     type="button"
                   >
                     <span aria-hidden="true">↪</span>
-                    Đăng xuất
+                    {t("Đăng xuất")}
                   </button>
                 </div>
               )}
@@ -917,18 +951,18 @@ export default function UserDemo({ apiUrl }) {
           <section className="panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">TÀI KHOẢN CỦA TÔI</p>
-                <h2>{editingProfile ? "Chỉnh sửa hồ sơ" : "Hồ sơ người dùng"}</h2>
+                <p className="eyebrow">{t("TÀI KHOẢN CỦA TÔI")}</p>
+                <h2>{editingProfile ? t("Chỉnh sửa hồ sơ") : t("Hồ sơ người dùng")}</h2>
               </div>
               <div className="user-demo-actions">
-                <span className="status-pill status-connected">Đã đăng nhập</span>
+                <span className="status-pill status-connected">{t("Đã đăng nhập")}</span>
               </div>
             </div>
             {editingProfile ? (
               <form className="user-demo-profile-form" onSubmit={saveProfile}>
                 <div className="user-profile-fields">
                   <label>
-                    Họ tên
+                    {t("Họ tên")}
                     <input
                       autoComplete="name"
                       maxLength={200}
@@ -942,7 +976,7 @@ export default function UserDemo({ apiUrl }) {
                     />
                   </label>
                   <label>
-                    Email
+                    {t("Email")}
                     <input
                       readOnly
                       value={profile?.Email ?? ""}
@@ -950,11 +984,11 @@ export default function UserDemo({ apiUrl }) {
                   </label>
                 </div>
                 <p className="hint">
-                  Email chưa thể thay đổi vì tài khoản hiện chưa có bước xác minh email.
+                  {t("Email chưa thể thay đổi vì tài khoản hiện chưa có bước xác minh email.")}
                 </p>
                 <div className="user-profile-actions">
                   <button className="button" disabled={busy} type="submit">
-                    {busy ? "Đang lưu..." : "Lưu thay đổi"}
+                    {busy ? t("Đang lưu...") : t("Lưu thay đổi")}
                   </button>
                   <button
                     className="button button-outline"
@@ -966,27 +1000,27 @@ export default function UserDemo({ apiUrl }) {
                     }}
                     type="button"
                   >
-                    Hủy
+                    {t("Hủy")}
                   </button>
                 </div>
               </form>
             ) : (
               <dl className="user-profile-details">
                 <div>
-                  <dt>Họ tên</dt>
+                  <dt>{t("Họ tên")}</dt>
                   <dd>{profile?.FullName ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>Email</dt>
+                  <dt>{t("Email")}</dt>
                   <dd>{profile?.Email ?? "—"}</dd>
                 </div>
                 <div>
-                  <dt>Ngày tạo tài khoản</dt>
-                  <dd>{formatDate(profile?.CreatedAt)}</dd>
+                  <dt>{t("Ngày tạo tài khoản")}</dt>
+                  <dd>{formatDate(profile?.CreatedAt, locale)}</dd>
                 </div>
                 <div>
-                  <dt>Đăng nhập gần nhất</dt>
-                  <dd>{formatDate(profile?.LastLoginAt)}</dd>
+                  <dt>{t("Đăng nhập gần nhất")}</dt>
+                  <dd>{formatDate(profile?.LastLoginAt, locale)}</dd>
                 </div>
               </dl>
             )}
@@ -995,8 +1029,8 @@ export default function UserDemo({ apiUrl }) {
           <section className="panel">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">BẢO MẬT TÀI KHOẢN</p>
-                <h2>Đổi mật khẩu</h2>
+                <p className="eyebrow">{t("BẢO MẬT TÀI KHOẢN")}</p>
+                <h2>{t("Đổi mật khẩu")}</h2>
               </div>
               {!changingPassword && (
                 <button
@@ -1008,7 +1042,7 @@ export default function UserDemo({ apiUrl }) {
                   }}
                   type="button"
                 >
-                  Đổi mật khẩu
+                  {t("Đổi mật khẩu")}
                 </button>
               )}
             </div>
@@ -1016,7 +1050,7 @@ export default function UserDemo({ apiUrl }) {
               <form className="user-demo-profile-form" onSubmit={changePassword}>
                 <div className="user-password-fields">
                   <label>
-                    Mật khẩu hiện tại
+                    {t("Mật khẩu hiện tại")}
                     <input
                       autoComplete="current-password"
                       maxLength={128}
@@ -1030,7 +1064,7 @@ export default function UserDemo({ apiUrl }) {
                     />
                   </label>
                   <label>
-                    Mật khẩu mới
+                    {t("Mật khẩu mới")}
                     <input
                       autoComplete="new-password"
                       maxLength={128}
@@ -1045,7 +1079,7 @@ export default function UserDemo({ apiUrl }) {
                     />
                   </label>
                   <label>
-                    Nhập lại mật khẩu mới
+                    {t("Nhập lại mật khẩu mới")}
                     <input
                       autoComplete="new-password"
                       maxLength={128}
@@ -1060,10 +1094,10 @@ export default function UserDemo({ apiUrl }) {
                     />
                   </label>
                 </div>
-                <p className="hint">Mật khẩu mới cần có ít nhất 12 ký tự.</p>
+                <p className="hint">{t("Mật khẩu mới cần có ít nhất 12 ký tự.")}</p>
                 <div className="user-profile-actions">
                   <button className="button" disabled={busy} type="submit">
-                    {busy ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
+                    {busy ? t("Đang cập nhật...") : t("Cập nhật mật khẩu")}
                   </button>
                   <button
                     className="button button-outline"
@@ -1079,7 +1113,7 @@ export default function UserDemo({ apiUrl }) {
                     }}
                     type="button"
                   >
-                    Hủy
+                    {t("Hủy")}
                   </button>
                 </div>
               </form>
@@ -1095,9 +1129,9 @@ export default function UserDemo({ apiUrl }) {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">EXPLORE PLACES</p>
-                <h2>Khám phá địa điểm</h2>
+                <h2>{t("Khám phá địa điểm")}</h2>
               </div>
-              <span className="muted-count">{placesTotal} địa điểm</span>
+              <span className="muted-count">{t("địa điểm", { count: placesTotal })}</span>
             </div>
             <form
               className="place-filters user-place-search"
@@ -1108,15 +1142,15 @@ export default function UserDemo({ apiUrl }) {
               }}
             >
               <label>
-                Tìm địa điểm
+                {t("Tìm địa điểm")}
                 <input
                   onChange={(event) => setPlaceSearch(event.target.value)}
-                  placeholder="Tên, địa chỉ hoặc từ khóa"
+                  placeholder={t("Tìm theo tên, địa chỉ, danh mục...")}
                   value={placeSearch}
                 />
               </label>
               <label>
-                Danh mục
+                {t("Danh mục")}
                 <select
                   disabled={categoriesLoading}
                   onChange={(event) => {
@@ -1128,17 +1162,19 @@ export default function UserDemo({ apiUrl }) {
                   value={selectedCategoryId}
                 >
                   <option value="">
-                    {categoriesLoading ? "Đang tải danh mục..." : "Tất cả danh mục"}
+                    {categoriesLoading
+                      ? t("Đang tải danh mục...")
+                      : t("Tất cả danh mục")}
                   </option>
                   {placeCategories.map((category) => (
                     <option key={category.CategoryId} value={category.CategoryId}>
-                      {category.CategoryName}
+                      {localizedField(category, locale, "CategoryName")}
                     </option>
                   ))}
                 </select>
               </label>
               <button className="button" disabled={placesLoading} type="submit">
-                Tìm kiếm
+                {t("Tìm kiếm")}
               </button>
             </form>
             {placeDetails ? (
@@ -1147,9 +1183,10 @@ export default function UserDemo({ apiUrl }) {
                 <div className="section-heading">
                   <div>
                     <p className="eyebrow">
-                      {placeDetails.category?.CategoryName ?? "ĐỊA ĐIỂM"}
+                      {localizedField(placeDetails.category, locale, "CategoryName")
+                        || t("ĐỊA ĐIỂM")}
                     </p>
-                    <h2>{placeDetails.place.PlaceName}</h2>
+                    <h2>{localizedField(placeDetails.place, locale, "PlaceName")}</h2>
                     <p className="subtitle">{placeDetails.place.Address}</p>
                   </div>
                   <button
@@ -1157,12 +1194,12 @@ export default function UserDemo({ apiUrl }) {
                     onClick={() => setPlaceDetails(null)}
                     type="button"
                   >
-                    Quay lại danh sách
+                    {t("Quay lại danh sách")}
                   </button>
                 </div>
                 {placeDetails.category?.Description && (
                   <p className="user-place-category-description">
-                    {placeDetails.category.Description}
+                    {localizedField(placeDetails.category, locale, "Description")}
                   </p>
                 )}
                 {placeDetails.place.Description && (
@@ -1172,13 +1209,16 @@ export default function UserDemo({ apiUrl }) {
                 )}
                 {(placeDetails.images ?? []).length > 0 && (
                   <section
-                    aria-label={`Ảnh ${placeDetails.place.PlaceName}`}
+                    aria-label={t("Ảnh {name}", {
+                      name: localizedField(placeDetails.place, locale, "PlaceName"),
+                    })}
                     className="user-place-image-grid"
                   >
                     {placeDetails.images.map((image) => (
                       <figure key={image.ImageId}>
                         <img
-                          alt={image.Caption || placeDetails.place.PlaceName}
+                          alt={image.Caption
+                            || localizedField(placeDetails.place, locale, "PlaceName")}
                           src={new URL(
                             image.FileUrl,
                             `${apiUrl.replace(/\/+$/, "")}/`,
@@ -1190,16 +1230,23 @@ export default function UserDemo({ apiUrl }) {
                   </section>
                 )}
                 <div className="user-place-narrations">
-                  <h3>Nội dung thuyết minh</h3>
-                  {(placeDetails.narrations ?? []).map((narration) => (
+                  <h3>{t("Nội dung thuyết minh")}</h3>
+                  {(placeDetails.narrations ?? [])
+                    .filter((narration) => narration.LanguageCode === locale)
+                    .map((narration) => (
                     <article className="user-place-narration" key={narration.NarrationId}>
                       <div className="user-place-narration-heading">
                         <strong>{narration.Title}</strong>
-                        <span>{narration.LanguageCode}</span>
+                        <span>{USER_LANGUAGES.find((item) => item.code === narration.LanguageCode)?.nativeName
+                          || narration.LanguageCode}</span>
                       </div>
                       <p>{narration.Content}</p>
                     </article>
                   ))}
+                    {(placeDetails.narrations ?? [])
+                      .filter((narration) => narration.LanguageCode === locale).length === 0 && (
+                      <p>{t("Không có nội dung thuyết minh bằng ngôn ngữ đã chọn.")}</p>
+                    )}
                 </div>
                 <div className="user-place-detail-actions">
                   <button
@@ -1224,28 +1271,51 @@ export default function UserDemo({ apiUrl }) {
                     type="button"
                   >
                     {!token
-                      ? "Đăng nhập để lưu"
+                      ? t("Đăng nhập để lưu")
                       : savedPlaces.some(
                         (item) => Number(item.PlaceId)
                           === Number(placeDetails.place.PlaceId),
                       )
-                        ? "Đã lưu · Bỏ lưu"
-                        : "Lưu địa điểm"}
+                        ? t("Đã lưu · Bỏ lưu")
+                        : t("Lưu địa điểm")}
                   </button>
                 </div>
                 <div className="user-place-detail-audios">
-                  <h3>Thuyết minh audio</h3>
-                  {(audiosByPlace[placeDetails.place.PlaceId] ?? []).length === 0 ? (
-                    <p>Địa điểm này chưa có audio thuyết minh.</p>
+                  <h3>{t("Thuyết minh audio")}</h3>
+                  <label className="user-audio-language">
+                    {t("Chọn ngôn ngữ audio")}
+                    <select
+                      onChange={(event) => setAudioLanguage(event.target.value)}
+                      value={audioLanguage}
+                    >
+                      {USER_LANGUAGES.map((language) => (
+                        <option key={language.code} value={language.code}>
+                          {language.nativeName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {(audiosByPlace[placeDetails.place.PlaceId] ?? [])
+                    .filter((audio) => audioLanguageCode(audio) === audioLanguage).length === 0 ? (
+                    <p>
+                      {(audiosByPlace[placeDetails.place.PlaceId] ?? []).length === 0
+                        ? t("Địa điểm này chưa có audio thuyết minh.")
+                        : t("Không có audio bằng ngôn ngữ đã chọn.")}
+                    </p>
                   ) : (
-                    audiosByPlace[placeDetails.place.PlaceId].map((audio) => (
+                    audiosByPlace[placeDetails.place.PlaceId]
+                      .filter((audio) => audioLanguageCode(audio) === audioLanguage)
+                      .map((audio) => (
                       <div className="user-place-audio" key={audio.AudioId}>
                         <div>
                           <strong>{audio.Title}</strong>
                           <span>
-                            {audio.Language}
+                            {USER_LANGUAGES.find((item) => item.code === audio.Language)?.nativeName
+                              || audio.Language}
                             {audio.DurationSeconds
-                              ? ` · ${audio.DurationSeconds} giây`
+                              ? t(" · {seconds} giây", {
+                                seconds: audio.DurationSeconds,
+                              })
                               : ""}
                           </span>
                         </div>
@@ -1265,9 +1335,9 @@ export default function UserDemo({ apiUrl }) {
                               );
                             }
                           }}
-                          onError={() => setError(
-                            `Không phát được audio "${audio.Title}".`,
-                          )}
+                          onError={() => setError(t("Không phát được audio “{title}”.", {
+                            title: audio.Title,
+                          }))}
                           preload="none"
                           ref={(element) => {
                             if (element) {
@@ -1287,9 +1357,9 @@ export default function UserDemo({ apiUrl }) {
                 </div>
               </article>
             ) : placesLoading ? (
-              <p className="user-place-empty">Đang tải địa điểm...</p>
+              <p className="user-place-empty">{t("Đang tải địa điểm...")}</p>
             ) : places.length === 0 ? (
-              <p className="user-place-empty">Không tìm thấy địa điểm phù hợp.</p>
+              <p className="user-place-empty">{t("Không tìm thấy địa điểm phù hợp.")}</p>
             ) : (
               <div className="user-place-grid">
                 {places.map((place) => {
@@ -1299,8 +1369,8 @@ export default function UserDemo({ apiUrl }) {
                   return (
                     <article className="user-place-card" key={place.PlaceId}>
                       <div>
-                        <p className="eyebrow">ĐỊA ĐIỂM #{place.PlaceId}</p>
-                        <h3>{place.PlaceName}</h3>
+                        <p className="eyebrow">{t("ĐỊA ĐIỂM")} #{place.PlaceId}</p>
+                        <h3>{localizedField(place, locale, "PlaceName")}</h3>
                         <p>{place.Address}</p>
                       </div>
                       <div className="user-place-actions">
@@ -1312,10 +1382,10 @@ export default function UserDemo({ apiUrl }) {
                           type="button"
                         >
                           {!token
-                            ? "Đăng nhập để lưu"
+                            ? t("Đăng nhập để lưu")
                             : isSaved
-                              ? "Đã lưu · Bỏ lưu"
-                              : "Lưu địa điểm"}
+                              ? t("Đã lưu · Bỏ lưu")
+                              : t("Lưu địa điểm")}
                         </button>
                         <button
                           className="text-button"
@@ -1324,8 +1394,8 @@ export default function UserDemo({ apiUrl }) {
                           type="button"
                         >
                           {loadingPlaceDetailsId === place.PlaceId
-                            ? "Đang tải chi tiết..."
-                            : "Xem chi tiết"}
+                            ? t("Đang tải chi tiết...")
+                            : t("Xem chi tiết")}
                         </button>
                       </div>
                     </article>
@@ -1343,7 +1413,7 @@ export default function UserDemo({ apiUrl }) {
                   ))}
                   type="button"
                 >
-                  Trang trước
+                  {t("Trang trước")}
                 </button>
                 <span>
                   Trang {Math.floor(placesSkip / PLACE_PAGE_LIMIT) + 1} /{" "}
@@ -1360,7 +1430,7 @@ export default function UserDemo({ apiUrl }) {
                   ))}
                   type="button"
                 >
-                  Trang sau
+                  {t("Trang sau")}
                 </button>
               </div>
             )}
@@ -1374,16 +1444,19 @@ export default function UserDemo({ apiUrl }) {
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">SAVED PLACES</p>
-                  <h2>Địa điểm đã lưu</h2>
+                  <h2>{t("Địa điểm đã lưu")}</h2>
                 </div>
-                <span className="muted-count">{savedPlacesTotal} địa điểm</span>
+                <span className="muted-count">{t("địa điểm", { count: savedPlacesTotal })}</span>
               </div>
               <ul className="user-demo-list">
                 {savedPlaces.map((item) => (
                   <li key={item.SavedPlaceId}>
                     <span>
-                      {item.PlaceName ?? "Địa điểm không còn tồn tại"}
-                      <small>Đã lưu lúc {formatDate(item.SavedAt)}</small>
+                      {localizedField(item, locale, "PlaceName")
+                        || t("Địa điểm không còn tồn tại")}
+                      <small>{t("Lưu lúc {date}", {
+                        date: formatDate(item.SavedAt, locale),
+                      })}</small>
                     </span>
                     <button
                       className="text-button danger-text"
@@ -1391,14 +1464,14 @@ export default function UserDemo({ apiUrl }) {
                       onClick={() => removePlace(item.PlaceId)}
                       type="button"
                     >
-                      Bỏ lưu
+                      {t("Bỏ lưu")}
                     </button>
                   </li>
                 ))}
                 {savedPlacesLoading ? (
-                  <li className="muted-row">Đang tải địa điểm đã lưu...</li>
+                  <li className="muted-row">{t("Đang tải địa điểm đã lưu...")}</li>
                 ) : savedPlaces.length === 0 ? (
-                  <li className="muted-row">Chưa lưu địa điểm nào.</li>
+                  <li className="muted-row">{t("Chưa có địa điểm nào được lưu.")}</li>
                 ) : null}
               </ul>
               {savedPlacesTotal > SAVED_PLACES_PAGE_LIMIT && (
@@ -1411,7 +1484,7 @@ export default function UserDemo({ apiUrl }) {
                     ))}
                     type="button"
                   >
-                    Trang trước
+                    {t("Trang trước")}
                   </button>
                   <span>
                     Trang {Math.floor(savedPlacesSkip / SAVED_PLACES_PAGE_LIMIT) + 1} /{" "}
@@ -1428,7 +1501,7 @@ export default function UserDemo({ apiUrl }) {
                     ))}
                     type="button"
                   >
-                    Trang sau
+                    {t("Trang sau")}
                   </button>
                 </div>
               )}
@@ -1438,10 +1511,12 @@ export default function UserDemo({ apiUrl }) {
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">LISTENING HISTORY</p>
-                  <h2>Lịch sử nghe</h2>
+                  <h2>{t("Lịch sử nghe")}</h2>
                 </div>
                 <div className="user-history-actions">
-                  <span className="muted-count">{listeningHistoryTotal} lượt nghe</span>
+                  <span className="muted-count">{t("lượt nghe", {
+                    count: listeningHistoryTotal,
+                  })}</span>
                   <button
                     className="text-button danger-text"
                     disabled={
@@ -1453,7 +1528,7 @@ export default function UserDemo({ apiUrl }) {
                     onClick={clearListeningHistory}
                     type="button"
                   >
-                    {clearingListeningHistory ? "Đang xóa..." : "Xóa tất cả"}
+                    {clearingListeningHistory ? t("Đang xóa...") : t("Xóa tất cả")}
                   </button>
                 </div>
               </div>
@@ -1462,16 +1537,25 @@ export default function UserDemo({ apiUrl }) {
                   <li key={item.ListeningHistoryId}>
                     <span>
                       <strong>
-                        {item.AudioTitle ?? `Audio ${item.AudioId ?? "không còn tồn tại"}`}
+                        {item.AudioTitle ?? t("Audio {id} không còn tồn tại", {
+                          id: item.AudioId ?? "",
+                        })}
                       </strong>
                       <small>
-                        {item.PlaceName ?? "Địa điểm không còn tồn tại"}
-                        {item.Language ? ` · ${item.Language}` : ""}
+                        {localizedField(item, locale, "PlaceName")
+                          || t("Địa điểm không còn tồn tại")}
+                        {item.Language
+                          ? ` · ${USER_LANGUAGES.find((language) => language.code === item.Language)?.nativeName
+                            || item.Language}`
+                          : ""}
                       </small>
                       <small>
-                        Đã nghe {item.PlayedSeconds}s ·{" "}
-                        {item.IsCompleted ? "Hoàn thành" : "Chưa hoàn thành"} ·{" "}
-                        {formatDate(item.ListenedAt)}
+                        {t("Đã nghe {seconds}s · {status}", {
+                          seconds: item.PlayedSeconds,
+                          status: item.IsCompleted
+                            ? t("Hoàn thành")
+                            : t("Chưa hoàn thành"),
+                        })} · {formatDate(item.ListenedAt, locale)}
                       </small>
                     </span>
                     <div className="user-history-row-actions">
@@ -1488,8 +1572,8 @@ export default function UserDemo({ apiUrl }) {
                         type="button"
                       >
                         {replayingHistoryId === item.ListeningHistoryId
-                          ? "Đang tải..."
-                          : "Nghe lại"}
+                          ? t("Đang tải...")
+                          : t("Nghe lại")}
                       </button>
                       <button
                         className="text-button danger-text"
@@ -1502,16 +1586,16 @@ export default function UserDemo({ apiUrl }) {
                         type="button"
                       >
                         {deletingHistoryId === item.ListeningHistoryId
-                          ? "Đang xóa..."
-                          : "Xóa"}
+                          ? t("Đang xóa...")
+                          : t("Xóa")}
                       </button>
                     </div>
                   </li>
                 ))}
                 {listeningHistoryLoading ? (
-                  <li className="muted-row">Đang tải lịch sử nghe...</li>
+                  <li className="muted-row">{t("Đang tải lịch sử nghe...")}</li>
                 ) : listeningHistory.length === 0 ? (
-                  <li className="muted-row">Chưa có lịch sử nghe.</li>
+                  <li className="muted-row">{t("Không có lịch sử nghe.")}</li>
                 ) : null}
               </ul>
               {listeningHistoryTotal > LISTENING_HISTORY_PAGE_LIMIT && (
@@ -1524,7 +1608,7 @@ export default function UserDemo({ apiUrl }) {
                     ))}
                     type="button"
                   >
-                    Trang trước
+                    {t("Trang trước")}
                   </button>
                   <span>
                     Trang {Math.floor(
@@ -1546,7 +1630,7 @@ export default function UserDemo({ apiUrl }) {
                     ))}
                     type="button"
                   >
-                    Trang sau
+                    {t("Trang sau")}
                   </button>
                 </div>
               )}
@@ -1556,8 +1640,8 @@ export default function UserDemo({ apiUrl }) {
           </section>
           )}
 
-      {error && <div className="message message-error" role="alert">{error}</div>}
-      {notice && !error && <div className="message message-success" role="status">{notice}</div>}
+      {error && <div className="message message-error" role="alert">{t(error)}</div>}
+      {notice && !error && <div className="message message-success" role="status">{t(notice)}</div>}
       {loginPromptOpen && (
         <div
           className="user-login-modal-backdrop"
@@ -1581,29 +1665,28 @@ export default function UserDemo({ apiUrl }) {
             tabIndex={-1}
           >
             <button
-              aria-label="Đóng thông báo đăng nhập"
+              aria-label={t("Đóng thông báo đăng nhập")}
               className="user-login-modal-close"
               onClick={() => setLoginPromptOpen(false)}
               type="button"
             >
               ×
             </button>
-            <p className="eyebrow">SAIGON ECHO · TÀI KHOẢN</p>
-            <h2 id="guest-login-title">Đăng nhập để lưu địa điểm</h2>
+            <p className="eyebrow">{t("SAIGON ECHO · TÀI KHOẢN")}</p>
+            <h2 id="guest-login-title">{t("Đăng nhập để lưu địa điểm")}</h2>
             <p>
-              Bạn vẫn có thể tiếp tục khám phá và nghe thuyết minh với tư cách khách.
-              Đăng nhập hoặc tạo tài khoản để lưu địa điểm yêu thích.
+              {t("Bạn vẫn có thể tiếp tục khám phá và nghe thuyết minh với tư cách khách. Đăng nhập hoặc tạo tài khoản để lưu địa điểm yêu thích.")}
             </p>
             <div className="user-login-modal-actions">
               <button className="button" onClick={goToLogin} type="button">
-                Đăng nhập hoặc đăng ký
+                {t("Đăng nhập hoặc đăng ký")}
               </button>
               <button
                 className="button button-outline"
                 onClick={() => setLoginPromptOpen(false)}
                 type="button"
               >
-                Tiếp tục khám phá
+                {t("Tiếp tục khám phá")}
               </button>
             </div>
           </section>

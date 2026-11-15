@@ -1,15 +1,18 @@
 import io
+import json
 import tempfile
 import unittest
 import wave
 from copy import deepcopy
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.error import HTTPError
 
 from fastapi import HTTPException, UploadFile
 
 from src.config.settings import Settings
 from src.services.audio_service import AudioService
+from src.services.translation_service import translate_text
 
 
 class FakeRepository:
@@ -92,6 +95,7 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
             cors_origins=[],
             image_storage_dir=Path(self.temporary_directory.name) / "images",
             audio_storage_dir=self.storage,
+            deepl_api_key="test-translator-key",
         )
         self.service = AudioService(self.repository, self.settings)
 
@@ -153,7 +157,7 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
 
         with patch("src.services.audio_service._generate_tts_audio", new=fake_generate_tts), \
              patch("src.services.audio_service._audio_duration", return_value=8), \
-             patch("src.services.audio_service._translate_text", return_value="Hello there") as translate:
+             patch("src.services.audio_service.translate_text", return_value="Hello there") as translate:
             audio = await self.service.generate(
                 17,
                 "en",
@@ -166,12 +170,101 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("Xin chào", audio["SourceText"])
         self.assertEqual("Hello there", audio["TranslatedText"])
         self.assertEqual(["Hello there"], spoken_text)
-        translate.assert_called_once_with("Xin chào", "en", "vi")
+        translate.assert_called_once_with(
+            "Xin chào",
+            "en",
+            "vi",
+            "test-translator-key",
+        )
+
+    async def test_translates_with_deepl_and_maps_simplified_chinese_code(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(
+            {"translations": [{"text": "你好"}]},
+        ).encode("utf-8")
+
+        with patch("src.services.translation_service.urlopen", return_value=response) as urlopen_mock:
+            translated = translate_text(
+                "Xin chào",
+                "zh-CN",
+                "vi",
+                "test-translator-key:fx",
+            )
+
+        self.assertEqual("你好", translated)
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(
+            "https://api-free.deepl.com/v2/translate",
+            request.full_url,
+        )
+        self.assertEqual(
+            "DeepL-Auth-Key test-translator-key:fx",
+            request.get_header("Authorization"),
+        )
+        self.assertEqual(
+            {"text": ["Xin chào"], "target_lang": "ZH-HANS", "source_lang": "VI"},
+            json.loads(request.data.decode("utf-8")),
+        )
+
+    async def test_deepl_translation_requires_api_key(self):
+        with self.assertRaises(HTTPException) as raised:
+            translate_text("Xin chào", "en", "vi", None)
+
+        self.assertEqual(503, raised.exception.status_code)
+
+    async def test_deepl_pro_key_uses_pro_endpoint(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(
+            {"translations": [{"text": "Hello"}]},
+        ).encode("utf-8")
+
+        with patch("src.services.translation_service.urlopen", return_value=response) as urlopen_mock:
+            translated = translate_text(
+                "Xin chào",
+                "en",
+                "vi",
+                "test-pro-key",
+            )
+
+        self.assertEqual("Hello", translated)
+        self.assertEqual(
+            "https://api.deepl.com/v2/translate",
+            urlopen_mock.call_args.args[0].full_url,
+        )
+
+    async def test_retries_deepl_rate_limit_before_returning_translation(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(
+            {"translations": [{"text": "Hello"}]},
+        ).encode("utf-8")
+        rate_limit = HTTPError(
+            "https://api.deepl.com/v2/translate",
+            429,
+            "Too Many Requests",
+            None,
+            None,
+        )
+        self.addCleanup(rate_limit.close)
+
+        with patch(
+            "src.services.translation_service.urlopen",
+            side_effect=[rate_limit, response],
+        ) as urlopen_mock, patch("src.services.translation_service.time.sleep") as sleep_mock:
+            translated = translate_text(
+                "Xin chào",
+                "en",
+                "vi",
+                "test-pro-key",
+            )
+
+        self.assertEqual("Hello", translated)
+        self.assertEqual(2, urlopen_mock.call_count)
+        sleep_mock.assert_called_once_with(0.5)
 
     async def test_validates_place_before_translating_text(self):
         self.repository.exists = False
 
-        with patch("src.services.audio_service._translate_text") as translate:
+        with patch("src.services.audio_service.translate_text") as translate:
             with self.assertRaises(HTTPException) as raised:
                 await self.service.generate(
                     17,

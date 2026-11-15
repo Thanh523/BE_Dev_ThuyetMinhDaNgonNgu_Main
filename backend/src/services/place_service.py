@@ -8,6 +8,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from src.repositories.category_repository import CategoryRepository
 from src.repositories.place_repository import PlaceRepository
+from src.services.localization_service import normalize_translations
 
 
 def slugify(value: str) -> str:
@@ -80,6 +81,7 @@ class PlaceService:
         place_name: str,
         slug: str | None,
         address: str,
+        translations: dict | None = None,
     ) -> dict:
         name = place_name.strip()
         address_value = address.strip()
@@ -102,15 +104,20 @@ class PlaceService:
                 )
             if await self.repository.slug_exists(slug_value):
                 raise HTTPException(status_code=409, detail="Slug is already in use.")
-            place = await self.repository.create(
-                {
-                    "CategoryId": category_id,
-                    "PlaceName": name,
-                    "Slug": slug_value,
-                    "Address": address_value,
-                    "IsVisible": True,
-                }
+            fields = {
+                "CategoryId": category_id,
+                "PlaceName": name,
+                "Slug": slug_value,
+                "Address": address_value,
+                "IsVisible": True,
+            }
+            normalized_translations = normalize_translations(
+                translations,
+                {"place_name": "PlaceName"},
             )
+            if normalized_translations:
+                fields["Translations"] = normalized_translations
+            place = await self.repository.create(fields)
             image_directory = self.image_storage_dir / _image_folder_name(
                 place["PlaceId"],
                 slug_value,
@@ -173,6 +180,11 @@ class PlaceService:
             if not address:
                 raise HTTPException(status_code=422, detail="Address is required.")
             mapped["Address"] = address
+        if "translations" in changes:
+            mapped["Translations"] = normalize_translations(
+                changes["translations"],
+                {"place_name": "PlaceName"},
+            )
         if "slug" in changes:
             slug = slugify(changes["slug"])
             if not slug:

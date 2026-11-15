@@ -42,7 +42,12 @@ class CategoryRepository:
             query["CategoryId"] = {"$ne": exclude_category_id}
         return await self.categories.find_one(query, {"_id": 1}) is not None
 
-    async def create(self, name: str, description: str) -> dict:
+    async def create(
+        self,
+        name: str,
+        description: str,
+        translations: dict | None = None,
+    ) -> dict:
         category_id = await next_integer_id(
             self.database,
             self.settings,
@@ -55,6 +60,8 @@ class CategoryRepository:
             "CategoryName": name,
             "Description": description,
         }
+        if translations:
+            document["Translations"] = translations
         await self.categories.insert_one(document)
         return document
 

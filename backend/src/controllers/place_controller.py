@@ -20,11 +20,16 @@ router = APIRouter(
 )
 
 
+class PlaceTranslation(BaseModel):
+    place_name: str | None = Field(default=None, max_length=200)
+
+
 class PlaceCreate(BaseModel):
     category_id: int = Field(gt=0)
     place_name: str = Field(min_length=1, max_length=200)
     slug: str | None = Field(default=None, max_length=200)
     address: str = Field(min_length=1, max_length=1000)
+    translations: dict[str, PlaceTranslation] | None = None
 
 
 class PlaceUpdate(BaseModel):
@@ -32,6 +37,7 @@ class PlaceUpdate(BaseModel):
     place_name: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = Field(default=None, min_length=1, max_length=200)
     address: str | None = Field(default=None, min_length=1, max_length=1000)
+    translations: dict[str, PlaceTranslation] | None = None
 
 
 class VisibilityUpdate(BaseModel):
@@ -117,6 +123,7 @@ async def create_place(
         request.place_name,
         request.slug,
         request.address,
+        request.model_dump().get("translations"),
     )
     await _log_place_change(
         database,

@@ -64,6 +64,7 @@ class Settings:
     max_image_size_bytes: int = 10 * 1024 * 1024
     max_audio_size_bytes: int = 50 * 1024 * 1024
     online_session_timeout_minutes: int = 5
+    deepl_api_key: str | None = None
 
 
 def get_settings() -> Settings:
@@ -137,4 +138,5 @@ def get_settings() -> Settings:
         online_session_timeout_minutes=int(
             os.getenv("ONLINE_SESSION_TIMEOUT_MINUTES", "5")
         ),
+        deepl_api_key=os.getenv("DEEPL_API_KEY", "").strip() or None,
     )

@@ -85,11 +85,24 @@ describe("Dashboard", () => {
 
   it("refreshes online status automatically while the dashboard is visible", async () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => dashboard,
-    });
+    const updatedDashboard = {
+      ...dashboard,
+      online_accounts_count: 0,
+      online_accounts: [],
+      online_guests_count: 0,
+      online_visitors_count: 0,
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => dashboard,
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => updatedDashboard,
+      });
     vi.stubGlobal("fetch", fetchMock);
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
@@ -111,10 +124,21 @@ describe("Dashboard", () => {
         await Promise.resolve();
       });
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(5000);
+        await vi.advanceTimersByTimeAsync(1000);
       });
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      const onlineMetric = screen
+        .getAllByText("Người dùng đang online", {
+          selector: ".dashboard-metric-label",
+        })
+        .pop();
+      expect(
+        onlineMetric.parentElement.querySelector(".dashboard-metric-value"),
+      ).toHaveTextContent("0");
+      expect(
+        screen.getByText("Hiện không có người dùng đang hoạt động."),
+      ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

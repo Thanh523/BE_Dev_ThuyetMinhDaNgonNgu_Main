@@ -9,6 +9,7 @@ from src.controllers.user_activity_controller import (
     list_user_categories,
     list_user_place_audios,
     list_user_places,
+    record_guest_listening,
     router,
 )
 from src.middlewares.user_auth import require_user
@@ -114,6 +115,7 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             ("POST", "/api/user/website-visits"),
             ("PATCH", "/api/user/website-visits/{visit_id}"),
             ("POST", "/api/user/website-visits/{visit_id}/end"),
+            ("POST", "/api/user/listening-usage"),
         )
         for key in public_routes:
             with self.subTest(route=key):
@@ -160,6 +162,34 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             "history-1",
         )
         self.assertEqual(204, response.status_code)
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_guest_listening_usage_does_not_require_an_account(
+        self,
+        service_factory,
+    ):
+        from src.controllers.user_activity_controller import ListeningCreate
+
+        service = Mock()
+        service.record_listening = AsyncMock(return_value={"AudioId": "audio-1"})
+        service_factory.return_value = service
+
+        result = await record_guest_listening(
+            request=ListeningCreate(
+                audio_id="audio-1",
+                played_seconds=30,
+                is_completed=False,
+            ),
+            database=object(),
+        )
+
+        service.record_listening.assert_awaited_once_with(
+            None,
+            "audio-1",
+            30,
+            False,
+        )
+        self.assertEqual({"AudioId": "audio-1"}, result)
 
     @patch("src.controllers.user_activity_controller._service")
     async def test_end_website_visit_closes_visit_without_authentication(

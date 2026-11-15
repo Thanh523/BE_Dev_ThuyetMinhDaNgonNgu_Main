@@ -255,6 +255,20 @@ async def record_listening(
     )
 
 
+@router.post("/listening-usage", status_code=status.HTTP_201_CREATED)
+async def record_guest_listening(
+    request: ListeningCreate,
+    database=Depends(get_database),
+) -> dict:
+    # Lượt nghe khách được thống kê nhưng không gắn với tài khoản cá nhân.
+    return await _service(database).record_listening(
+        None,
+        request.audio_id,
+        request.played_seconds,
+        request.is_completed,
+    )
+
+
 @router.post(
     "/website-visits",
     response_model=WebsiteVisitView,

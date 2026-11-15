@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 describe("guest place browsing", () => {
-  it("loads public places and details, and never records guest listening history", async () => {
+  it("records anonymous listening usage without adding personal listening history", async () => {
     const fetchMock = vi.fn(async (input, options = {}) => {
       const { pathname } = new URL(String(input));
       let payload;
@@ -45,6 +45,8 @@ describe("guest place browsing", () => {
           }],
           narrations: [],
         };
+      } else if (pathname === "/api/user/listening-usage") {
+        payload = { AudioId: "audio-1", PlaceId: 1 };
       } else {
         throw new Error(`Unexpected request: ${pathname}`);
       }
@@ -80,7 +82,22 @@ describe("guest place browsing", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Tiếp tục khám phá" }));
 
-    fireEvent.ended(document.querySelector("audio"));
+    const audio = document.querySelector("audio");
+    Object.defineProperty(audio, "currentTime", {
+      configurable: true,
+      value: 30,
+    });
+    fireEvent.pause(audio);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/user/listening-usage"),
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.any(Headers),
+        }),
+      );
+    });
 
     expect(fetchMock.mock.calls.every(([, options]) => (
       !options.headers.has("Authorization")

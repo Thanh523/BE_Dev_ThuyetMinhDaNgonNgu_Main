@@ -66,7 +66,9 @@ Dashboard lọc lượt truy cập website theo ngày và tính một lượt ch
 tab; các lần tải lại trong cùng tab không cộng thêm, còn phiên/tab mới được tính
 lượt mới. Danh sách online gồm tài khoản đã đăng nhập và số phiên khách chưa
 đăng nhập; trạng thái được xác định theo hoạt động trong khoảng thời gian cấu
-hình.
+hình. Thống kê lượt nghe theo địa điểm và ngôn ngữ lấy từ lịch sử nghe của tài
+khoản và ghi nhận riêng các lượt nghe khách ẩn danh qua
+`POST /api/user/listening-usage`; dữ liệu này không gắn với tài khoản cá nhân.
 
 #### Chuyển văn bản thành giọng nói (Text-to-Speech)
 

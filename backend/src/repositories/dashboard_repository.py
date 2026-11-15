@@ -146,7 +146,12 @@ class DashboardRepository:
                 {"$unwind": "$audio"},
                 {
                     "$group": {
-                        "_id": "$audio.Language",
+                        "_id": {
+                            "$ifNull": [
+                                "$audio.Language",
+                                "$audio.LanguageCode",
+                            ]
+                        },
                         "count": {"$sum": 1},
                     }
                 },

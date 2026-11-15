@@ -104,6 +104,21 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
     setNotice("");
   }
 
+  const selectedAudio = audios.find(
+    (audio) => String(audio.AudioId) === String(form.audio_id),
+  );
+  const selectedAudioText = selectedAudio?.TranslatedText || selectedAudio?.SourceText || "";
+
+  function selectAudio(audioId) {
+    const audio = audios.find((item) => String(item.AudioId) === String(audioId));
+    const content = audio?.TranslatedText || audio?.SourceText;
+    setForm((current) => ({
+      ...current,
+      audio_id: audioId,
+      ...(content ? { content } : {}),
+    }));
+  }
+
   async function saveNarration(event) {
     event.preventDefault();
     if (!placeId) return setError("Hãy chọn địa điểm trước.");
@@ -241,7 +256,7 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
           <label>
             Audio
             <select
-              onChange={(event) => setForm({ ...form, audio_id: event.target.value })}
+              onChange={(event) => selectAudio(event.target.value)}
               value={form.audio_id || ""}
             >
               <option value="">Không gắn audio</option>
@@ -254,6 +269,11 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
                 ))}
             </select>
           </label>
+          {selectedAudio && !selectedAudioText && (
+            <p className="hint">
+                Audio này được tải lên trực tiếp nên chưa có nội dung văn bản để tự điền.
+            </p>
+          )}
           <label className="narration-content-field">
             Nội dung
             <textarea

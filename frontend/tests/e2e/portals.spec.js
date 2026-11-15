@@ -4,6 +4,17 @@ test("User portal has no Admin navigation", async ({ page }) => {
   await page.goto("/user");
 
   await expect(
+    page.getByRole("heading", { name: "Chọn ngôn ngữ để tiếp tục" }),
+  ).toBeVisible();
+  await expect(page.locator(".user-portal-qr-code")).toBeVisible();
+  const userPortalUrl = new URL("/user", page.url()).toString();
+  await expect(page.getByRole("link", { name: userPortalUrl })).toHaveAttribute(
+    "href",
+    userPortalUrl,
+  );
+  await page.getByRole("button", { name: /tiếng việt/i }).click();
+
+  await expect(
     page.getByRole("heading", { name: "Mỗi góc phố đều có một câu chuyện." }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: /admin/i })).toHaveCount(0);

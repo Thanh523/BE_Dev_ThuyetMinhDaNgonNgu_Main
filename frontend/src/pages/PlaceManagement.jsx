@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import TranslationEditor from "../components/TranslationEditor.jsx";
 
 async function adminRequest(apiUrl, token, path, options = {}) {
   const headers = new Headers(options.headers);
@@ -30,6 +31,7 @@ const EMPTY_PLACE = {
   place_name: "",
   slug: "",
   address: "",
+  translations: {},
 };
 
 export default function PlaceManagement({ apiUrl, token, setError, setNotice }) {
@@ -110,6 +112,12 @@ export default function PlaceManagement({ apiUrl, token, setError, setNotice }) 
       place_name: place.PlaceName,
       slug: place.Slug,
       address: place.Address,
+      translations: Object.fromEntries(
+        ["en", "zh-CN", "ja", "ko", "fr"].map((language) => [
+          language,
+          { place_name: place.Translations?.[language]?.PlaceName || "" },
+        ]),
+      ),
     });
     setSelectedPlace(null);
     setError("");
@@ -130,6 +138,7 @@ export default function PlaceManagement({ apiUrl, token, setError, setNotice }) 
       place_name: placeForm.place_name,
       slug: placeForm.slug || undefined,
       address: placeForm.address,
+      translations: placeForm.translations,
     };
     try {
       if (editingPlace) {
@@ -266,6 +275,20 @@ export default function PlaceManagement({ apiUrl, token, setError, setNotice }) 
               value={placeForm.place_name}
             />
           </label>
+          <TranslationEditor
+            apiUrl={apiUrl}
+            disabled={busy}
+            fields={[{
+              key: "place_name",
+              label: "Tên địa điểm",
+              maxLength: 200,
+              sourceText: placeForm.place_name,
+            }]}
+            onChange={(translations) => updatePlaceField("translations", translations)}
+            setError={setError}
+            token={token}
+            translations={placeForm.translations}
+          />
           <label>
             Danh mục *
             <select

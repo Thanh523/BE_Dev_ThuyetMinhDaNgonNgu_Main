@@ -215,6 +215,45 @@ class PlaceManagementTests(unittest.IsolatedAsyncioTestCase):
             set(place),
         )
 
+    async def test_creates_and_updates_place_name_translations(self):
+        place = await self.places.create_place(
+            self.category["CategoryId"],
+            "Dinh Độc Lập",
+            None,
+            "Quận 1",
+            {"en": {"place_name": "Independence Palace"}},
+        )
+        self.assertEqual(
+            {"en": {"PlaceName": "Independence Palace"}},
+            place["Translations"],
+        )
+
+        updated = await self.places.update_place(
+            place["PlaceId"],
+            {
+                "translations": {
+                    "en": {"place_name": "Reunification Palace"},
+                    "ja": {"place_name": " "},
+                }
+            },
+        )
+        self.assertEqual(
+            {"en": {"PlaceName": "Reunification Palace"}},
+            updated["Translations"],
+        )
+
+    async def test_rejects_unsupported_place_translation_language(self):
+        with self.assertRaises(HTTPException) as raised:
+            await self.places.create_place(
+                self.category["CategoryId"],
+                "Dinh Độc Lập",
+                None,
+                "Quận 1",
+                {"de": {"place_name": "Unabhängigkeitspalast"}},
+            )
+
+        self.assertEqual(422, raised.exception.status_code)
+
     async def test_update_visibility_and_filtered_list_use_repository(self):
         place = await self.places.create_place(
             self.category["CategoryId"],
@@ -296,6 +335,42 @@ class PlaceManagementTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("Botanical garden", updated["CategoryName"])
         self.assertEqual("A garden open to visitors.", updated["Description"])
+
+    async def test_category_translations_are_saved_and_updated(self):
+        category = await self.categories.create_category(
+            "Di tích lịch sử",
+            "Các địa điểm lịch sử",
+            {
+                "en": {
+                    "category_name": "Historic sites",
+                    "description": "Historical places",
+                }
+            },
+        )
+        self.assertEqual(
+            {
+                "en": {
+                    "CategoryName": "Historic sites",
+                    "Description": "Historical places",
+                }
+            },
+            category["Translations"],
+        )
+
+        updated = await self.categories.update_category(
+            category["CategoryId"],
+            "Di tích",
+            translations={
+                "en": {
+                    "category_name": "Heritage sites",
+                    "description": " ",
+                }
+            },
+        )
+        self.assertEqual(
+            {"en": {"CategoryName": "Heritage sites"}},
+            updated["Translations"],
+        )
 
     async def test_category_rename_without_description_preserves_existing_description(self):
         category = await self.categories.create_category(

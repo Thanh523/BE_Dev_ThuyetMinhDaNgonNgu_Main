@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from src.repositories.category_repository import CategoryRepository
+from src.services.localization_service import normalize_translations
 
 
 class CategoryService:
@@ -17,7 +18,12 @@ class CategoryService:
                 detail="Category list is temporarily unavailable.",
             ) from error
 
-    async def create_category(self, name: str, description: str = "") -> dict:
+    async def create_category(
+        self,
+        name: str,
+        description: str = "",
+        translations: dict | None = None,
+    ) -> dict:
         category_name = name.strip()
         category_description = description.strip()
         if not category_name:
@@ -28,7 +34,18 @@ class CategoryService:
                     status_code=409,
                     detail="Category name already exists.",
                 )
-            return await self.repository.create(category_name, category_description)
+            normalized_translations = normalize_translations(
+                translations,
+                {
+                    "category_name": "CategoryName",
+                    "description": "Description",
+                },
+            )
+            return await self.repository.create(
+                category_name,
+                category_description,
+                normalized_translations,
+            )
         except DuplicateKeyError as error:
             raise HTTPException(
                 status_code=409,
@@ -42,6 +59,7 @@ class CategoryService:
         category_id: int,
         name: str,
         description: str | None = None,
+        translations: dict | None = None,
     ) -> dict:
         category_name = name.strip()
         if not category_name:
@@ -49,6 +67,14 @@ class CategoryService:
         updates = {"CategoryName": category_name}
         if description is not None:
             updates["Description"] = description.strip()
+        if translations is not None:
+            updates["Translations"] = normalize_translations(
+                translations,
+                {
+                    "category_name": "CategoryName",
+                    "description": "Description",
+                },
+            )
         try:
             if await self.repository.exists_by_name(category_name, category_id):
                 raise HTTPException(

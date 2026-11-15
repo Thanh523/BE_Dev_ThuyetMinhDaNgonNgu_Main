@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import TranslationEditor from "../components/TranslationEditor.jsx";
 
 async function adminRequest(apiUrl, token, path, options = {}) {
   const headers = new Headers(options.headers);
@@ -25,7 +26,7 @@ async function adminRequest(apiUrl, token, path, options = {}) {
   return payload;
 }
 
-const EMPTY_FORM = { category_name: "", description: "" };
+const EMPTY_FORM = { category_name: "", description: "", translations: {} };
 
 export default function CategoryManagement({
   apiUrl,
@@ -119,6 +120,15 @@ export default function CategoryManagement({
     setForm({
       category_name: category.CategoryName,
       description: category.Description || "",
+      translations: Object.fromEntries(
+        ["en", "zh-CN", "ja", "ko", "fr"].map((language) => [
+          language,
+          {
+            category_name: category.Translations?.[language]?.CategoryName || "",
+            description: category.Translations?.[language]?.Description || "",
+          },
+        ]),
+      ),
     });
     setError("");
     setNotice("");
@@ -163,6 +173,32 @@ export default function CategoryManagement({
             value={form.description}
           />
         </label>
+        <TranslationEditor
+          apiUrl={apiUrl}
+          disabled={busy}
+          fields={[
+            {
+              key: "category_name",
+              label: "Tên danh mục",
+              maxLength: 100,
+              sourceText: form.category_name,
+            },
+            {
+              key: "description",
+              label: "Mô tả",
+              maxLength: 1000,
+              multiline: true,
+              sourceText: form.description,
+            },
+          ]}
+          onChange={(translations) => setForm((current) => ({
+            ...current,
+            translations,
+          }))}
+          setError={setError}
+          token={token}
+          translations={form.translations}
+        />
         <div className="category-form-actions">
           <button className="button" disabled={busy} type="submit">
             {editingCategory ? "Lưu thay đổi" : "Thêm danh mục"}

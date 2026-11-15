@@ -20,7 +20,9 @@ Audio management uses the `PlaceAudios` collection, linked by `PlaceId` and
 narration. Uploaded audio files are validated with `mutagen` and limited to 50
 MB by default. Files are stored under
 `backend/uploads/audio/<PlaceId>-<slug>` by default. The admin audio page
-provides audio upload and management without a text-to-speech form.
+supports generating speech from narration text, with optional translation
+into one or more selected languages, alongside manual audio upload and
+management.
 Text narration follows the ERD in `Narrations` with `NarrationId`,
 `PlaceId`, `LanguageCode`, `Title`, and `Content`.
 The `AudioFiles` collection references it through `NarrationId`; a narration
@@ -44,6 +46,7 @@ MONGODB_URI=mongodb+srv://<database-user>:<url-encoded-password>@<cluster-host>/
 MONGODB_DATABASE=SaigonEcho
 JWT_KEY=<random-secret-at-least-32-characters>
 ONLINE_SESSION_TIMEOUT_MINUTES=5
+DEEPL_API_KEY=<deepl-api-key>
 ```
 
 Generate a secret locally with
@@ -58,6 +61,11 @@ Dashboard xem một tài khoản là đang online khi phiên chưa kết thúc v
 The application loads `atlas-credentials.env` automatically; existing process
 environment variables take precedence. From the `backend` directory, install
 dependencies, create the first admin, and start the API:
+
+Audio text translation uses DeepL API. Set `DEEPL_API_KEY` in
+`backend/atlas-credentials.env`; API Free keys ending in `:fx` use the Free
+endpoint automatically, while other keys use the Pro endpoint. Keep the key
+secret and restart the backend after configuring it.
 
 ```powershell
 python -m pip install -r requirements.txt

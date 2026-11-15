@@ -48,6 +48,10 @@ export default function AudioManagement({ apiUrl, token, setError, setNotice }) 
   const [uploadLanguage, setUploadLanguage] = useState("vi");
   const [uploadTitle, setUploadTitle] = useState("");
   const [voiceName, setVoiceName] = useState("");
+  const [sourceLanguage, setSourceLanguage] = useState("vi");
+  const [targetLanguages, setTargetLanguages] = useState(["en", "ko"]);
+  const [sourceText, setSourceText] = useState("");
+  const [generatedTitle, setGeneratedTitle] = useState("");
   const [editing, setEditing] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editLanguage, setEditLanguage] = useState("");
@@ -119,6 +123,65 @@ export default function AudioManagement({ apiUrl, token, setError, setNotice }) 
     } finally {
       setBusy(false);
     }
+  }
+
+  async function generateAudio(event) {
+    event.preventDefault();
+    if (!placeId) return setError("Hãy chọn địa điểm trước khi tạo audio.");
+    if (!sourceText.trim()) return setError("Hãy nhập nội dung thuyết minh.");
+    if (!targetLanguages.length) return setError("Hãy chọn ít nhất một ngôn ngữ đích.");
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const generated = [];
+    const failures = [];
+    try {
+      for (const language of targetLanguages) {
+        const languageName = LANGUAGES.find((item) => item.code === language)?.name || language;
+        const body = {
+          language,
+          title: generatedTitle,
+          text: sourceText.trim(),
+          source_text: sourceText.trim(),
+        };
+        if (language !== sourceLanguage) {
+          body.source_language = sourceLanguage;
+        }
+
+        try {
+          await request(
+            apiUrl,
+            token,
+            `/api/admin/places/${encodeURIComponent(placeId)}/audios`,
+            { method: "POST", body: JSON.stringify(body) },
+          );
+          generated.push(languageName);
+        } catch (error) {
+          failures.push(`${languageName}: ${error.message}`);
+        }
+      }
+
+      if (generated.length) {
+        await loadAudios();
+        setNotice(`Đã tạo audio: ${generated.join(", ")}.`);
+      }
+      if (failures.length) {
+        setError(`Không tạo được ${failures.join("; ")}.`);
+      }
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleTargetLanguage(language) {
+    setTargetLanguages((current) => (
+      current.includes(language)
+        ? current.filter((item) => item !== language)
+        : [...current, language]
+    ));
   }
 
   function startEditing(audio) {
@@ -231,6 +294,74 @@ export default function AudioManagement({ apiUrl, token, setError, setNotice }) 
         {!places.length && (
           <p className="hint">Chưa có địa điểm. Hãy tạo địa điểm trước.</p>
         )}
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">TEXT TO SPEECH</p>
+            <h2>Dịch văn bản và tạo audio</h2>
+          </div>
+          <span className="muted-count">Tạo audio riêng cho từng ngôn ngữ</span>
+        </div>
+        <form className="audio-generate-form" onSubmit={generateAudio}>
+          <label>
+            Ngôn ngữ văn bản nguồn *
+            <select
+              required
+              value={sourceLanguage}
+              onChange={(event) => setSourceLanguage(event.target.value)}
+            >
+              {LANGUAGES.map((item) => (
+                <option key={item.code} value={item.code}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tiêu đề audio
+            <input
+              maxLength={200}
+              value={generatedTitle}
+              onChange={(event) => setGeneratedTitle(event.target.value)}
+              placeholder="Để trống để dùng tiêu đề mặc định"
+            />
+          </label>
+          <label className="audio-generation-text">
+            Nội dung thuyết minh *
+            <textarea
+              maxLength={100000}
+              onChange={(event) => setSourceText(event.target.value)}
+              placeholder="Nhập nội dung cần dịch và chuyển thành giọng nói"
+              required
+              rows={7}
+              value={sourceText}
+            />
+          </label>
+          <fieldset className="audio-generation-targets">
+            <legend>Ngôn ngữ đích *</legend>
+            {LANGUAGES.map((item) => (
+              <label className="audio-generation-target" key={item.code}>
+                <input
+                  checked={targetLanguages.includes(item.code)}
+                  onChange={() => toggleTargetLanguage(item.code)}
+                  type="checkbox"
+                />
+                {item.name}
+              </label>
+            ))}
+          </fieldset>
+          <button
+            className="button"
+            disabled={busy || !placeId}
+            type="submit"
+          >
+            {busy ? "Đang dịch và tạo audio..." : "Dịch và tạo audio"}
+          </button>
+        </form>
+        <p className="hint">
+          Chọn một hoặc nhiều ngôn ngữ đích. Hệ thống sẽ dịch từ ngôn ngữ nguồn,
+          sau đó tạo audio với giọng mặc định tương ứng.
+        </p>
       </section>
 
       <section className="panel">

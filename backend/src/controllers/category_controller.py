@@ -17,9 +17,15 @@ router = APIRouter(
 )
 
 
+class CategoryTranslation(BaseModel):
+    category_name: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=1000)
+
+
 class CategoryCreate(BaseModel):
     category_name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=1000)
+    translations: dict[str, CategoryTranslation] | None = None
 
 
 class CategoryView(BaseModel):
@@ -28,6 +34,10 @@ class CategoryView(BaseModel):
     category_id: int = Field(alias="CategoryId")
     category_name: str = Field(alias="CategoryName")
     description: str = Field(default="", alias="Description")
+    translations: dict[str, dict[str, str]] = Field(
+        default_factory=dict,
+        alias="Translations",
+    )
 
 
 def _service(database) -> CategoryService:
@@ -78,6 +88,7 @@ async def create_category(
     category = await _service(database).create_category(
         request.category_name,
         request.description or "",
+        request.model_dump().get("translations"),
     )
     await _log_category_change(
         database,
@@ -100,6 +111,7 @@ async def update_category(
         category_id,
         request.category_name,
         request.description,
+        request.model_dump().get("translations"),
     )
     await _log_category_change(
         database,

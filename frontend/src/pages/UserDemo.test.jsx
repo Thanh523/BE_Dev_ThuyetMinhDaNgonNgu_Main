@@ -90,4 +90,72 @@ describe("guest place browsing", () => {
       expect.anything(),
     );
   });
+
+  it("uses localized place names and only shows audio for the selected audio language", async () => {
+    const fetchMock = vi.fn(async (input) => {
+      const { pathname } = new URL(String(input));
+      const payload = pathname === "/api/user/categories"
+        ? [{
+          CategoryId: 3,
+          CategoryName: "Bảo tàng",
+          Translations: { en: { CategoryName: "Museum" } },
+        }]
+        : pathname === "/api/user/places"
+          ? {
+            items: [{
+              PlaceId: 1,
+              PlaceName: "Bảo tàng Thành phố",
+              Translations: { en: { PlaceName: "City Museum" } },
+              Address: "65 Lý Tự Trọng",
+            }],
+            total: 1,
+          }
+          : {
+            place: {
+              PlaceId: 1,
+              PlaceName: "Bảo tàng Thành phố",
+              Translations: { en: { PlaceName: "City Museum" } },
+              Address: "65 Lý Tự Trọng",
+            },
+            category: {
+              CategoryName: "Bảo tàng",
+              Translations: { en: { CategoryName: "Museum" } },
+            },
+            images: [],
+            audios: [{
+              AudioId: "audio-vi",
+              Title: "Vietnamese narration",
+              Language: "vi",
+              FileUrl: "/uploads/audio/story.mp3",
+            }],
+            narrations: [],
+          };
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => payload,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<UserDemo apiUrl="http://localhost:8000" locale="en" />);
+
+    expect(await screen.findByText("City Museum")).toBeInTheDocument();
+    expect(screen.getByLabelText("Categories")).toHaveTextContent("Museum");
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/user/places/1"),
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    ));
+    expect(await screen.findByRole("heading", { name: "City Museum" })).toBeInTheDocument();
+    expect(await screen.findByText("No audio is available in the selected language."))
+      .toBeInTheDocument();
+    expect(document.querySelector("audio")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Audio language" }), {
+      target: { value: "vi" },
+    });
+    expect(document.querySelector("audio")).toBeInTheDocument();
+  });
 });

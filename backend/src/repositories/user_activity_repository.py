@@ -35,6 +35,7 @@ class UserActivityRepository:
                 "Address": 1,
                 "CategoryId": 1,
                 "Description": 1,
+                "Translations": 1,
             },
         )
         if place is None:
@@ -50,7 +51,13 @@ class UserActivityRepository:
             return None
         return await self.categories.find_one(
             {"CategoryId": category_id},
-            {"_id": 0, "CategoryId": 1, "CategoryName": 1, "Description": 1},
+            {
+                "_id": 0,
+                "CategoryId": 1,
+                "CategoryName": 1,
+                "Description": 1,
+                "Translations": 1,
+            },
         )
 
     async def list_visible_categories(self) -> list[dict]:
@@ -63,7 +70,7 @@ class UserActivityRepository:
             return []
         cursor = self.categories.find(
             {"CategoryId": {"$in": category_ids}},
-            {"_id": 0, "CategoryId": 1, "CategoryName": 1},
+            {"_id": 0, "CategoryId": 1, "CategoryName": 1, "Translations": 1},
         ).sort("CategoryName", 1)
         return await cursor.to_list(length=None)
 
@@ -237,14 +244,21 @@ class UserActivityRepository:
         if query_place_ids:
             places = await self.places.find(
                 {"PlaceId": {"$in": list(query_place_ids)}},
-                {"_id": 0, "PlaceId": 1, "PlaceName": 1},
+                {
+                    "_id": 0,
+                    "PlaceId": 1,
+                    "PlaceName": 1,
+                    "Translations": 1,
+                },
             ).to_list(length=len(query_place_ids))
             names_by_id = {
-                str(place["PlaceId"]): place.get("PlaceName")
+                str(place["PlaceId"]): place
                 for place in places
             }
             for item in items:
-                item["PlaceName"] = names_by_id.get(str(item.get("PlaceId")))
+                place = names_by_id.get(str(item.get("PlaceId")))
+                item["PlaceName"] = place.get("PlaceName") if place else None
+                item["Translations"] = place.get("Translations", {}) if place else {}
 
         return items, total
 
@@ -369,10 +383,15 @@ class UserActivityRepository:
             if place_query_ids:
                 places = await self.places.find(
                     {"PlaceId": {"$in": list(place_query_ids)}},
-                    {"_id": 0, "PlaceId": 1, "PlaceName": 1},
+                    {
+                        "_id": 0,
+                        "PlaceId": 1,
+                        "PlaceName": 1,
+                        "Translations": 1,
+                    },
                 ).to_list(length=len(place_query_ids))
             places_by_id = {
-                str(place["PlaceId"]): place.get("PlaceName")
+                str(place["PlaceId"]): place
                 for place in places
             }
 
@@ -389,7 +408,9 @@ class UserActivityRepository:
                     audio.get("LanguageCode"),
                 )
                 item["PlaceId"] = audio.get("PlaceId")
-                item["PlaceName"] = places_by_id.get(str(audio.get("PlaceId")))
+                place = places_by_id.get(str(audio.get("PlaceId")))
+                item["PlaceName"] = place.get("PlaceName") if place else None
+                item["Translations"] = place.get("Translations", {}) if place else {}
 
         return items, total
 

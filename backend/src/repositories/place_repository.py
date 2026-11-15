@@ -3,6 +3,7 @@ from typing import Any
 
 from pymongo import ReturnDocument
 
+from src.config.localization import TRANSLATABLE_CONTENT_LANGUAGES
 from src.config.settings import Settings
 from src.repositories.id_repository import next_integer_id
 
@@ -31,6 +32,15 @@ class PlaceRepository:
                 {"PlaceName": {"$regex": pattern, "$options": "i"}},
                 {"Slug": {"$regex": pattern, "$options": "i"}},
                 {"Address": {"$regex": pattern, "$options": "i"}},
+                *[
+                    {
+                        f"Translations.{language}.PlaceName": {
+                            "$regex": pattern,
+                            "$options": "i",
+                        }
+                    }
+                    for language in TRANSLATABLE_CONTENT_LANGUAGES
+                ],
             ]
         if category_id is not None:
             query["CategoryId"] = category_id

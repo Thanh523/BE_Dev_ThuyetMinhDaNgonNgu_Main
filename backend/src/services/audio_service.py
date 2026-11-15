@@ -16,16 +16,17 @@ try:
 except ImportError:  # pragma: no cover - optional dependency for TTS generation
     edge_tts = None
 
-try:
-    from deep_translator import GoogleTranslator
-except ImportError:  # pragma: no cover - optional dependency for translation
-    GoogleTranslator = None
-
 from src.config.settings import Settings
 from src.repositories.place_audio_repository import PlaceAudioRepository
+from src.services.translation_service import translate_text
 
 
 AUDIO_URL_PREFIX = "/uploads/audio/"
+DEEPL_API_FREE_URL = "https://api-free.deepl.com/v2/translate"
+DEEPL_API_PRO_URL = "https://api.deepl.com/v2/translate"
+DEEPL_TARGET_LANGUAGE_CODES = {"zh-CN": "ZH-HANS"}
+DEEPL_SOURCE_LANGUAGE_CODES = {"zh-CN": "ZH"}
+TRANSLATION_RETRY_DELAYS = (0.5, 1, 2)
 SAFE_PLACE_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 LANGUAGE_NAMES = {
     "vi": "Vietnamese",
@@ -115,22 +116,6 @@ async def _generate_tts_audio(path: Path, text: str, voice: str) -> None:
     await communicate.save(str(path))
 
 
-def _translate_text(text: str, target_language: str, source_language: str | None = None) -> str:
-    if GoogleTranslator is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Text translation is unavailable because deep-translator is not installed.",
-        )
-    source = source_language or "auto"
-    try:
-        return GoogleTranslator(source=source, target=target_language).translate(text)
-    except Exception as error:
-        raise HTTPException(
-            status_code=502,
-            detail="Text translation could not be completed.",
-        ) from error
-
-
 def _audio_document(
     *,
     audio_id: str,
@@ -207,17 +192,19 @@ class AudioService:
         translated_text = (translated_text or "").strip()
         if not translated_text and source_text and source_text != text:
             translated_text = await asyncio.to_thread(
-                _translate_text,
+                translate_text,
                 source_text,
                 language,
                 source_language,
+                self.settings.deepl_api_key,
             )
         elif not translated_text and source_text and source_text == text and source_language is not None:
             translated_text = await asyncio.to_thread(
-                _translate_text,
+                translate_text,
                 source_text,
                 language,
                 source_language,
+                self.settings.deepl_api_key,
             )
         elif not translated_text:
             translated_text = source_text

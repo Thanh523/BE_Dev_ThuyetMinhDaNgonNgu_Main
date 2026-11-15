@@ -11,6 +11,7 @@ from src.routes.user_auth_routes import router as user_auth_router
 from src.routes.user_activity_routes import router as user_activity_router
 from src.controllers.dashboard_controller import router as dashboard_router
 from src.routes.language_routes import router as language_router
+from src.controllers.translation_controller import router as translation_router
 
 routers = (
     image_router,
@@ -25,6 +26,7 @@ routers = (
     narration_router,
     dashboard_router,
     language_router,
+    translation_router,
 )
 
 __all__ = ["routers"]

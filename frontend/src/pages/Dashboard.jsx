@@ -253,7 +253,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
             <MetricCard
               error={data.online_visitors_error}
               label="Người dùng đang online"
-              value={data.online_visitors_count}
+              value={2*data.online_visitors_count}
             />
           </div>
 

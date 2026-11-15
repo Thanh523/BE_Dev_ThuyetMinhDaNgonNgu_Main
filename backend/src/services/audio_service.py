@@ -131,6 +131,36 @@ def _translate_text(text: str, target_language: str, source_language: str | None
         ) from error
 
 
+def _audio_document(
+    *,
+    audio_id: str,
+    place_id: int | str,
+    language: str,
+    title: str,
+    source_text: str,
+    translated_text: str,
+    file_url: str,
+    voice_name: str,
+    duration_seconds: int,
+) -> dict:
+    now = datetime.now(timezone.utc)
+    return {
+        "AudioId": audio_id,
+        "PlaceId": place_id,
+        "Language": language,
+        "Title": title or f"Thuyết minh {LANGUAGE_NAMES[language]}",
+        "SourceText": source_text,
+        "TranslatedText": translated_text,
+        "FileUrl": file_url,
+        "Voice": voice_name,
+        "VoiceName": voice_name,
+        "DurationSeconds": duration_seconds,
+        "IsActive": True,
+        "CreatedAt": now,
+        "UpdatedAt": now,
+    }
+
+
 class AudioService:
     def __init__(self, repository: PlaceAudioRepository, settings: Settings):
         self.repository = repository
@@ -173,6 +203,7 @@ class AudioService:
         if len(voice_name) > 100:
             raise HTTPException(status_code=422, detail="Voice name is too long.")
 
+        place = await self._validate_place_and_language(place_id, language)
         translated_text = (translated_text or "").strip()
         if not translated_text and source_text and source_text != text:
             translated_text = await asyncio.to_thread(
@@ -191,8 +222,6 @@ class AudioService:
         elif not translated_text:
             translated_text = source_text
 
-        place = await self._validate_place_and_language(place_id, language)
-
         audio_id = uuid.uuid4().hex
         audio_directory = await self._place_audio_directory(place)
         final_path = audio_directory / f"{audio_id}.mp3"
@@ -202,22 +231,17 @@ class AudioService:
             speech_text = translated_text if translated_text else source_text
             await _generate_tts_audio(final_path, speech_text, voice_name)
             duration_seconds = await asyncio.to_thread(_audio_duration, final_path)
-            now = datetime.now(timezone.utc)
-            document = {
-                "AudioId": audio_id,
-                "PlaceId": place_id,
-                "Language": language,
-                "Title": title or f"Thuyết minh {LANGUAGE_NAMES[language]}",
-                "SourceText": source_text,
-                "TranslatedText": translated_text,
-                "FileUrl": f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
-                "Voice": voice_name,
-                "VoiceName": voice_name,
-                "DurationSeconds": duration_seconds,
-                "IsActive": True,
-                "CreatedAt": now,
-                "UpdatedAt": now,
-            }
+            document = _audio_document(
+                audio_id=audio_id,
+                place_id=place_id,
+                language=language,
+                title=title,
+                source_text=source_text,
+                translated_text=translated_text,
+                file_url=f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
+                voice_name=voice_name,
+                duration_seconds=duration_seconds,
+            )
             await self.repository.insert(document)
             return document
         except DuplicateKeyError as error:
@@ -271,22 +295,17 @@ class AudioService:
                 raise HTTPException(status_code=422, detail="The audio file is empty.")
             duration_seconds = await asyncio.to_thread(_audio_duration, staging_path)
             await asyncio.to_thread(os.replace, staging_path, final_path)
-            now = datetime.now(timezone.utc)
-            document = {
-                "AudioId": audio_id,
-                "PlaceId": place_id,
-                "Language": language,
-                "Title": title or f"Thuyết minh {LANGUAGE_NAMES[language]}",
-                "SourceText": "",
-                "TranslatedText": "",
-                "FileUrl": f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
-                "Voice": voice_name,
-                "VoiceName": voice_name,
-                "DurationSeconds": duration_seconds,
-                "IsActive": True,
-                "CreatedAt": now,
-                "UpdatedAt": now,
-            }
+            document = _audio_document(
+                audio_id=audio_id,
+                place_id=place_id,
+                language=language,
+                title=title,
+                source_text="",
+                translated_text="",
+                file_url=f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
+                voice_name=voice_name,
+                duration_seconds=duration_seconds,
+            )
             await self.repository.insert(document)
             return document
         except DuplicateKeyError as error:
@@ -373,7 +392,6 @@ class AudioService:
         return audio_directory
 
     async def update(self, audio_id: str, changes: dict) -> dict:
-        audio = await self._get(audio_id)
         mapped: dict = {}
         if "title" in changes:
             title = changes["title"].strip()
@@ -381,6 +399,7 @@ class AudioService:
                 raise HTTPException(status_code=422, detail="Title is required.")
             mapped["Title"] = title
         if "language" in changes:
+            audio = await self._get(audio_id)
             language = changes["language"].strip()
             if language not in LANGUAGE_NAMES:
                 raise HTTPException(status_code=422, detail="Unsupported audio language.")

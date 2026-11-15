@@ -655,9 +655,6 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
   }
 
   async function recordAudioPlayback(audio, element, completed) {
-    if (!token) {
-      return;
-    }
     const playedSeconds = Math.floor(
       completed ? element.duration : element.currentTime,
     );
@@ -667,24 +664,33 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
 
     // Tạm dừng lưu tiến độ; sự kiện ended lưu cùng thời lượng và đánh dấu hoàn tất.
     try {
-      await userRequest(apiUrl, token, "/api/user/listening-history", {
-        method: "POST",
-        body: JSON.stringify({
-          audio_id: audio.AudioId,
-          played_seconds: playedSeconds,
-          is_completed: completed,
-        }),
-      });
-      await refreshActivity(token);
-      setListeningHistorySkip(0);
-      setListeningHistoryRefresh((current) => current + 1);
-      setNotice(
-        completed
-          ? t("Đã nghe xong “{title}”, lịch sử đã được lưu.", {
-            title: audio.Title,
-          })
-          : t("Đã lưu tiến độ nghe “{title}”.", { title: audio.Title }),
+      await userRequest(
+        apiUrl,
+        token,
+        token
+          ? "/api/user/listening-history"
+          : "/api/user/listening-usage",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            audio_id: audio.AudioId,
+            played_seconds: playedSeconds,
+            is_completed: completed,
+          }),
+        },
       );
+      if (token) {
+        await refreshActivity(token);
+        setListeningHistorySkip(0);
+        setListeningHistoryRefresh((current) => current + 1);
+        setNotice(
+          completed
+            ? t("Đã nghe xong “{title}”, lịch sử đã được lưu.", {
+              title: audio.Title,
+            })
+            : t("Đã lưu tiến độ nghe “{title}”.", { title: audio.Title }),
+        );
+      }
       setError("");
     } catch (requestError) {
       if (requestError.status === 404) {

@@ -131,7 +131,7 @@ class UserActivityService:
 
     async def record_listening(
         self,
-        user_id: str,
+        user_id: str | None,
         audio_id: str,
         played_seconds: int,
         is_completed: bool,

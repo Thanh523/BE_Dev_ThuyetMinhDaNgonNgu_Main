@@ -310,6 +310,25 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(404, raised.exception.status_code)
         self.repository.record_listening.assert_not_awaited()
 
+    async def test_guest_listening_is_recorded_without_a_user_id(self):
+        self.repository.get_active_audio = AsyncMock(
+            return_value={"AudioId": "audio-1", "PlaceId": 15},
+        )
+        self.repository.record_listening = AsyncMock(
+            return_value={"AudioId": "audio-1", "PlaceId": 15},
+        )
+
+        await self.service.record_listening(None, "audio-1", 30, False)
+
+        self.repository.record_listening.assert_awaited_once()
+        self.assertIsNone(
+            self.repository.record_listening.await_args.args[0],
+        )
+        self.assertEqual(
+            ("audio-1", 15, 30, False),
+            self.repository.record_listening.await_args.args[1:5],
+        )
+
     async def test_user_cannot_update_another_users_session(self):
         self.repository.get_session = AsyncMock(return_value=None)
         self.repository.touch_session = AsyncMock()

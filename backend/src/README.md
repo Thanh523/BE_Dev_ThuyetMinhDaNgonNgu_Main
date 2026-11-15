@@ -57,10 +57,10 @@ các thao tác cá nhân phải lấy từ claims của token, không lấy từ
 | Nhật ký hoạt động admin | [`controllers/admin_activity_controller.py`](./controllers/admin_activity_controller.py) | [`services/admin_activity_service.py`](./services/admin_activity_service.py), [`services/admin_audit_service.py`](./services/admin_audit_service.py) | [`repositories/admin_activity_repository.py`](./repositories/admin_activity_repository.py) |
 | Gợi ý dịch | [`controllers/translation_controller.py`](./controllers/translation_controller.py) | [`services/translation_service.py`](./services/translation_service.py) | — |
 
-`AudioService` và `ImageService` quản lý cả metadata trong MongoDB lẫn file trên
-đĩa. Nếu thay đổi quy tắc upload/xóa/thay file, đọc service tương ứng trước để
-giữ nhất quán hai nơi. `PlaceService` xử lý slug, kiểm tra danh mục và tạo thư
-mục ảnh khi tạo địa điểm.
+`AudioService` và `ImageService` quản lý cả metadata lẫn file; mỗi loại có thể
+lưu trên đĩa hoặc trong MongoDB GridFS. Nếu thay đổi quy tắc upload/xóa/thay
+file, đọc service tương ứng trước để giữ nhất quán hai nơi. `PlaceService` xử
+lý slug, kiểm tra danh mục và tạo thư mục ảnh khi tạo địa điểm.
 
 Dashboard lọc lượt truy cập website theo ngày và tính một lượt cho mỗi phiên
 tab; các lần tải lại trong cùng tab không cộng thêm, còn phiên/tab mới được tính
@@ -77,8 +77,15 @@ chuyển dữ liệu yêu cầu cho `AudioService.generate()` trong
 [`services/audio_service.py`](./services/audio_service.py). Service chọn văn
 bản đã dịch (nếu có) hoặc văn bản nguồn, rồi gọi `_generate_tts_audio()`;
 hàm này dùng thư viện `edge-tts` để tạo file MP3 với giọng đọc tương ứng ngôn
-ngữ. Sau khi tạo file, service tính thời lượng, lưu file dưới
-`/uploads/audio/` và ghi metadata vào MongoDB.
+ngữ. Sau khi tạo file, service tính thời lượng, lưu file bằng backend được cấu
+hình rồi ghi metadata vào MongoDB. Mặc định `AUDIO_STORAGE_BACKEND=local` lưu
+file dưới `/uploads/audio/`; đặt `AUDIO_STORAGE_BACKEND=gridfs` để lưu file mới
+trong MongoDB GridFS và phát qua endpoint `/api/audio/files/{file_id}`.
+`AUDIO_GRIDFS_BUCKET` tùy chọn tên bucket, mặc định là `audio`. File local cũ
+không tự được chuyển sang GridFS. Ảnh dùng cấu hình độc lập:
+`IMAGE_STORAGE_BACKEND=gridfs` để lưu ảnh mới trong bucket mặc định `images`
+và phát qua `/api/images/files/{file_id}`; đổi tên bucket bằng
+`IMAGE_GRIDFS_BUCKET`. Ảnh local cũ cũng không tự được chuyển.
 
 Các giọng mặc định theo ngôn ngữ được khai báo trong `VOICES` của
 `audio_service.py`. Nếu cần thay đổi cách chọn văn bản, giọng đọc hoặc xử lý

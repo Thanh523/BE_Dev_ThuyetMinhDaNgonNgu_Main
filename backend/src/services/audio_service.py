@@ -23,6 +23,7 @@ from src.services.translation_service import translate_text
 
 
 AUDIO_URL_PREFIX = "/uploads/audio/"
+GRIDFS_AUDIO_URL_PREFIX = "/api/audio/files/"
 DEEPL_API_FREE_URL = "https://api-free.deepl.com/v2/translate"
 DEEPL_API_PRO_URL = "https://api.deepl.com/v2/translate"
 DEEPL_TARGET_LANGUAGE_CODES = {"zh-CN": "ZH-HANS"}
@@ -144,9 +145,10 @@ def _audio_document(
     file_url: str,
     voice_name: str,
     duration_seconds: int,
+    gridfs_file_id: str | None = None,
 ) -> dict:
     now = datetime.now(timezone.utc)
-    return {
+    document = {
         "AudioId": audio_id,
         "PlaceId": place_id,
         "Language": language,
@@ -161,13 +163,24 @@ def _audio_document(
         "CreatedAt": now,
         "UpdatedAt": now,
     }
+    if gridfs_file_id is not None:
+        document["GridFSFileId"] = gridfs_file_id
+    return document
 
 
 class AudioService:
-    def __init__(self, repository: PlaceAudioRepository, settings: Settings):
+    def __init__(
+        self,
+        repository: PlaceAudioRepository,
+        settings: Settings,
+        gridfs_storage=None,
+    ):
         self.repository = repository
         self.settings = settings
         self.settings.audio_storage_dir.mkdir(parents=True, exist_ok=True)
+        self.gridfs_storage = gridfs_storage
+        if settings.audio_storage_backend == "gridfs" and gridfs_storage is None:
+            raise RuntimeError("GridFS audio storage is not initialized.")
 
     async def list_for_place(self, place_id: int | str) -> list[dict]:
         try:
@@ -229,12 +242,19 @@ class AudioService:
         audio_id = uuid.uuid4().hex
         audio_directory = await self._place_audio_directory(place)
         final_path = audio_directory / f"{audio_id}.mp3"
+        gridfs_file_id = None
         try:
             if not voice_name:
                 raise HTTPException(status_code=422, detail="A voice is required to generate audio.")
             speech_text = translated_text if translated_text else source_text
             await _generate_tts_audio(final_path, speech_text, voice_name)
             duration_seconds = await asyncio.to_thread(_audio_duration, final_path)
+            file_url, gridfs_file_id = await self._store_audio_file(
+                final_path,
+                final_path,
+            )
+            if self.gridfs_storage is not None:
+                await self._remove_files(final_path)
             document = _audio_document(
                 audio_id=audio_id,
                 place_id=place_id,
@@ -242,26 +262,27 @@ class AudioService:
                 title=title,
                 source_text=source_text,
                 translated_text=translated_text,
-                file_url=f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
+                file_url=file_url,
                 voice_name=voice_name,
                 duration_seconds=duration_seconds,
+                gridfs_file_id=gridfs_file_id,
             )
             await self.repository.insert(document)
             return document
         except DuplicateKeyError as error:
-            await self._remove_files(final_path)
+            await self._cleanup_new_audio(final_path, final_path, gridfs_file_id)
             raise HTTPException(
                 status_code=409,
                 detail="Audio already exists for this place and language.",
             ) from error
         except HTTPException:
-            await self._remove_files(final_path)
+            await self._cleanup_new_audio(final_path, final_path, gridfs_file_id)
             raise
         except PyMongoError as error:
-            await self._remove_files(final_path)
+            await self._cleanup_new_audio(final_path, final_path, gridfs_file_id)
             raise HTTPException(status_code=503, detail="Audio could not be generated.") from error
         except OSError as error:
-            await self._remove_files(final_path)
+            await self._cleanup_new_audio(final_path, final_path, gridfs_file_id)
             raise HTTPException(status_code=503, detail="Audio file could not be generated.") from error
 
     async def upload(
@@ -293,12 +314,18 @@ class AudioService:
         staging_path = self.settings.audio_storage_dir / f".{audio_id}.upload"
         audio_directory = await self._place_audio_directory(place)
         final_path = audio_directory / f"{audio_id}{extension}"
+        gridfs_file_id = None
         try:
             size = await self._save_upload(upload, staging_path)
             if size == 0:
                 raise HTTPException(status_code=422, detail="The audio file is empty.")
             duration_seconds = await asyncio.to_thread(_audio_duration, staging_path)
-            await asyncio.to_thread(os.replace, staging_path, final_path)
+            file_url, gridfs_file_id = await self._store_audio_file(
+                staging_path,
+                final_path,
+            )
+            if self.gridfs_storage is not None:
+                await self._remove_files(staging_path)
             document = _audio_document(
                 audio_id=audio_id,
                 place_id=place_id,
@@ -306,26 +333,27 @@ class AudioService:
                 title=title,
                 source_text="",
                 translated_text="",
-                file_url=f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
+                file_url=file_url,
                 voice_name=voice_name,
                 duration_seconds=duration_seconds,
+                gridfs_file_id=gridfs_file_id,
             )
             await self.repository.insert(document)
             return document
         except DuplicateKeyError as error:
-            await self._remove_files(staging_path, final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise HTTPException(
                 status_code=409,
                 detail="Audio already exists for this place and language.",
             ) from error
         except HTTPException:
-            await self._remove_files(staging_path, final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise
         except PyMongoError as error:
-            await self._remove_files(staging_path, final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise HTTPException(status_code=503, detail="Audio could not be saved.") from error
         except OSError as error:
-            await self._remove_files(staging_path, final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise HTTPException(status_code=503, detail="Audio file could not be saved.") from error
 
     async def _save_upload(self, upload: UploadFile, path: Path) -> int:
@@ -394,6 +422,58 @@ class AudioService:
                 detail="Place audio folder could not be created.",
             ) from error
         return audio_directory
+
+    async def _store_audio_file(
+        self,
+        staged_path: Path,
+        final_path: Path,
+    ) -> tuple[str, str | None]:
+        if self.gridfs_storage is not None:
+            file_id = await self.gridfs_storage.upload_file(
+                staged_path,
+                final_path.name,
+            )
+            return f"{GRIDFS_AUDIO_URL_PREFIX}{file_id}", file_id
+
+        if staged_path != final_path:
+            await asyncio.to_thread(os.replace, staged_path, final_path)
+        try:
+            relative_path = final_path.resolve().relative_to(
+                self.settings.audio_storage_dir.resolve(),
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=500,
+                detail="Audio storage path is invalid.",
+            ) from error
+        return f"{AUDIO_URL_PREFIX}{relative_path.as_posix()}", None
+
+    async def _cleanup_new_audio(
+        self,
+        staged_path: Path,
+        final_path: Path,
+        gridfs_file_id: str | None,
+    ) -> None:
+        await self._remove_files(staged_path, final_path)
+        if gridfs_file_id is not None and self.gridfs_storage is not None:
+            await self.gridfs_storage.delete_file(gridfs_file_id)
+
+    async def _remove_stored_audio(self, audio: dict) -> None:
+        gridfs_file_id = audio.get("GridFSFileId")
+        if gridfs_file_id:
+            if self.gridfs_storage is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="GridFS audio storage is not initialized.",
+                )
+            await self.gridfs_storage.delete_file(gridfs_file_id)
+            return
+
+        path = _stored_file_path(
+            self.settings.audio_storage_dir,
+            audio.get("FileUrl", ""),
+        )
+        await asyncio.to_thread(_remove_file, path)
 
     async def update(self, audio_id: str, changes: dict) -> dict:
         mapped: dict = {}
@@ -485,39 +565,42 @@ class AudioService:
         staging_path = self.settings.audio_storage_dir / f".{replacement_id}.upload"
         audio_directory = await self._place_audio_directory(place)
         final_path = audio_directory / f"{replacement_id}{extension}"
+        gridfs_file_id = None
         try:
             size = await self._save_upload(upload, staging_path)
             if size == 0:
                 raise HTTPException(status_code=422, detail="The audio file is empty.")
             duration_seconds = await asyncio.to_thread(_audio_duration, staging_path)
-            await asyncio.to_thread(os.replace, staging_path, final_path)
+            file_url, gridfs_file_id = await self._store_audio_file(
+                staging_path,
+                final_path,
+            )
+            if self.gridfs_storage is not None:
+                await self._remove_files(staging_path)
             updated = await self.repository.update(
                 audio_id,
                 {
-                    "FileUrl": f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
+                    "FileUrl": file_url,
+                    "GridFSFileId": gridfs_file_id,
                     "DurationSeconds": duration_seconds,
                 },
             )
         except HTTPException:
-            await self._remove_files(staging_path, final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise
         except (PyMongoError, OSError) as error:
-            await self._remove_files(staging_path, final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise HTTPException(
                 status_code=503,
                 detail="Audio file could not be replaced.",
             ) from error
         if updated is None:
-            await self._remove_files(final_path)
+            await self._cleanup_new_audio(staging_path, final_path, gridfs_file_id)
             raise HTTPException(status_code=404, detail="Audio was not found.")
 
-        old_path = _stored_file_path(
-            self.settings.audio_storage_dir,
-            audio.get("FileUrl", ""),
-        )
         try:
-            await asyncio.to_thread(_remove_file, old_path)
-        except OSError as error:
+            await self._remove_stored_audio(audio)
+        except (HTTPException, OSError) as error:
             raise HTTPException(
                 status_code=503,
                 detail="Audio was replaced, but the previous file could not be removed.",
@@ -532,10 +615,9 @@ class AudioService:
             raise HTTPException(status_code=503, detail="Audio could not be deleted.") from error
         if deleted is None:
             raise HTTPException(status_code=404, detail="Audio was not found.")
-        path = _stored_file_path(self.settings.audio_storage_dir, audio.get("FileUrl", ""))
         try:
-            await asyncio.to_thread(_remove_file, path)
-        except OSError as error:
+            await self._remove_stored_audio(audio)
+        except (HTTPException, OSError) as error:
             raise HTTPException(
                 status_code=503,
                 detail="Audio metadata was deleted, but its file could not be removed.",

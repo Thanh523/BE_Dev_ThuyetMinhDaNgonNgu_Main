@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import wave
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.error import HTTPError
@@ -66,6 +67,24 @@ class FakeRepository:
     async def delete(self, audio_id):
         document = self.documents.pop(audio_id, None)
         return deepcopy(document) if document is not None else None
+
+
+class FakeGridFSAudioStorage:
+    def __init__(self):
+        self.files = {}
+        self.next_id = 1
+
+    async def upload_file(self, path, filename):
+        file_id = f"{self.next_id:024x}"
+        self.next_id += 1
+        self.files[file_id] = {
+            "filename": filename,
+            "content": path.read_bytes(),
+        }
+        return file_id
+
+    async def delete_file(self, file_id):
+        self.files.pop(file_id, None)
 
 
 def wav_bytes() -> bytes:
@@ -148,6 +167,51 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(12, audio["DurationSeconds"])
         self.assertIn("/uploads/audio/17-test-place/", audio["FileUrl"])
         self.assertTrue(self.stored_file(audio["FileUrl"]).exists())
+
+    async def test_generates_tts_into_gridfs_without_leaving_local_audio(self):
+        storage = FakeGridFSAudioStorage()
+        settings = replace(self.settings, audio_storage_backend="gridfs")
+        service = AudioService(self.repository, settings, storage)
+
+        async def fake_generate_tts(path, text, voice):
+            path.write_bytes(b"generated audio")
+
+        with patch("src.services.audio_service._generate_tts_audio", new=fake_generate_tts), \
+             patch("src.services.audio_service._audio_duration", return_value=12):
+            audio = await service.generate(
+                17,
+                "en",
+                "Welcome",
+                voice_name="en-US-JennyNeural",
+            )
+
+        file_id = audio["GridFSFileId"]
+        self.assertEqual(f"/api/audio/files/{file_id}", audio["FileUrl"])
+        self.assertEqual(b"generated audio", storage.files[file_id]["content"])
+        self.assertEqual([], list((self.storage / "17-test-place").iterdir()))
+
+    async def test_gridfs_upload_replace_and_delete_manage_file_lifecycle(self):
+        storage = FakeGridFSAudioStorage()
+        settings = replace(self.settings, audio_storage_backend="gridfs")
+        service = AudioService(self.repository, settings, storage)
+
+        audio = await service.upload(17, "en", self.audio_upload(), "", "")
+        old_file_id = audio["GridFSFileId"]
+        self.assertIn(old_file_id, storage.files)
+        self.assertEqual([], list((self.storage / "17-test-place").iterdir()))
+
+        updated = await service.replace_file(
+            audio["AudioId"],
+            self.audio_upload("replacement.wav"),
+        )
+        new_file_id = updated["GridFSFileId"]
+        self.assertNotEqual(old_file_id, new_file_id)
+        self.assertNotIn(old_file_id, storage.files)
+        self.assertIn(new_file_id, storage.files)
+
+        await service.delete(audio["AudioId"])
+        self.assertNotIn(new_file_id, storage.files)
+        self.assertNotIn(audio["AudioId"], self.repository.documents)
 
     async def test_edge_tts_rejection_returns_bad_gateway_and_cleans_up(self):
         error = aiohttp.ClientResponseError(

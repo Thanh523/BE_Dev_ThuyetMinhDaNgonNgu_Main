@@ -47,6 +47,10 @@ class Settings:
     cors_origins: list[str]
     image_storage_dir: Path
     audio_storage_dir: Path = Path("uploads/audio")
+    audio_storage_backend: str = "local"
+    audio_gridfs_bucket: str = "audio"
+    image_storage_backend: str = "local"
+    image_gridfs_bucket: str = "images"
     categories_collection: str = "Categories"
     languages_collection: str = "Languages"
     audio_collection: str = "PlaceAudios"
@@ -66,6 +70,16 @@ class Settings:
     max_audio_size_bytes: int = 50 * 1024 * 1024
     online_session_timeout_minutes: int = 5
     deepl_api_key: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.audio_storage_backend not in {"local", "gridfs"}:
+            raise ValueError("AUDIO_STORAGE_BACKEND must be either 'local' or 'gridfs'.")
+        if not self.audio_gridfs_bucket.strip():
+            raise ValueError("AUDIO_GRIDFS_BUCKET must not be empty.")
+        if self.image_storage_backend not in {"local", "gridfs"}:
+            raise ValueError("IMAGE_STORAGE_BACKEND must be either 'local' or 'gridfs'.")
+        if not self.image_gridfs_bucket.strip():
+            raise ValueError("IMAGE_GRIDFS_BUCKET must not be empty.")
 
 
 def get_settings() -> Settings:
@@ -95,6 +109,16 @@ def get_settings() -> Settings:
                 str(BACKEND_ROOT / "uploads" / "audio"),
             )
         ).resolve(),
+        audio_storage_backend=os.getenv(
+            "AUDIO_STORAGE_BACKEND",
+            "local",
+        ).strip().lower(),
+        audio_gridfs_bucket=os.getenv("AUDIO_GRIDFS_BUCKET", "audio").strip(),
+        image_storage_backend=os.getenv(
+            "IMAGE_STORAGE_BACKEND",
+            "local",
+        ).strip().lower(),
+        image_gridfs_bucket=os.getenv("IMAGE_GRIDFS_BUCKET", "images").strip(),
         categories_collection=os.getenv("MONGODB_CATEGORIES_COLLECTION", "Categories"),
         languages_collection=os.getenv("MONGODB_LANGUAGES_COLLECTION", "Languages"),
         audio_collection=os.getenv("MONGODB_AUDIO_COLLECTION", "PlaceAudios"),

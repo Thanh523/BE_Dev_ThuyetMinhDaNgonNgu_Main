@@ -1,12 +1,14 @@
 import io
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 from PIL import Image
 
 from src.config.settings import Settings
+from src.controllers.image_controller import playback_router
 from src.services.image_service import ImageService
 
 
@@ -69,6 +71,24 @@ class FakeRepository:
         return self.documents.pop(image_id, None)
 
 
+class FakeGridFSFileStorage:
+    def __init__(self):
+        self.files = {}
+        self.next_id = 1
+
+    async def upload_file(self, path, filename):
+        file_id = f"{self.next_id:024x}"
+        self.next_id += 1
+        self.files[file_id] = {
+            "filename": filename,
+            "content": path.read_bytes(),
+        }
+        return file_id
+
+    async def delete_file(self, file_id):
+        self.files.pop(file_id, None)
+
+
 def image_bytes(image_format: str) -> bytes:
     image = Image.new("RGB", (2, 2), color="blue")
     output = io.BytesIO()
@@ -120,6 +140,33 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(self.stored_file(image["FileUrl"]).is_file() for image in images))
         self.assertTrue((self.storage / "17-test-place").is_dir())
         self.assertEqual(2, len(self.repository.documents))
+
+    async def test_gridfs_stores_images_and_deletes_file_with_metadata(self):
+        storage = FakeGridFSFileStorage()
+        settings = replace(self.settings, image_storage_backend="gridfs")
+        service = ImageService(self.repository, settings, storage)
+
+        images = await service.upload(
+            place_id=17,
+            files=[
+                UploadFile(filename="first.jpg", file=io.BytesIO(image_bytes("JPEG"))),
+                UploadFile(filename="second.png", file=io.BytesIO(image_bytes("PNG"))),
+            ],
+            captions=None,
+            sort_orders=None,
+        )
+
+        self.assertEqual(2, len(storage.files))
+        for image in images:
+            file_id = image["GridFSFileId"]
+            self.assertEqual(f"/api/images/files/{file_id}", image["FileUrl"])
+            self.assertTrue(storage.files[file_id]["content"])
+        self.assertEqual([], list(service.staging_dir.iterdir()))
+        self.assertEqual([], list((self.storage / "17-test-place").iterdir()))
+
+        await service.delete(images[0]["ImageId"])
+        self.assertEqual(1, len(storage.files))
+        self.assertNotIn(images[0]["ImageId"], self.repository.documents)
 
     async def test_lists_images_for_all_places_with_place_names(self):
         await self.service.upload(
@@ -202,6 +249,16 @@ class ImageServiceTests(unittest.IsolatedAsyncioTestCase):
             await self.service.update(next(iter(self.repository.documents)), None, 2)
 
         self.assertEqual(409, raised.exception.status_code)
+
+
+class ImageControllerTests(unittest.TestCase):
+    def test_gridfs_image_playback_route_is_registered(self):
+        routes = {
+            (method, route.path)
+            for route in playback_router.routes
+            for method in route.methods
+        }
+        self.assertIn(("GET", "/api/images/files/{file_id}"), routes)
 
 
 if __name__ == "__main__":

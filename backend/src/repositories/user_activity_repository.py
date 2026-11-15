@@ -3,6 +3,7 @@ from typing import Any
 import uuid
 
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 
 class UserActivityRepository:
@@ -10,6 +11,7 @@ class UserActivityRepository:
         self.saved_places = database[settings.saved_places_collection]
         self.listening_history = database[settings.listening_history_collection]
         self.visitor_sessions = database[settings.visitor_sessions_collection]
+        self.website_visits = database[settings.website_visits_collection]
         self.usage_events = database[settings.usage_events_collection]
         self.places = database[settings.places_collection]
         self.categories = database[settings.categories_collection]
@@ -525,6 +527,105 @@ class UserActivityRepository:
         return (
             await cursor.to_list(length=limit),
             await self.visitor_sessions.count_documents(query),
+        )
+
+    async def start_website_visit(self, visit_id: str, now: datetime) -> dict:
+        try:
+            return await self.website_visits.find_one_and_update(
+                {"VisitId": visit_id},
+                {
+                    "$setOnInsert": {
+                        "VisitId": visit_id,
+                        "StartedAt": now,
+                    },
+                    "$set": {"LastSeenAt": now},
+                    "$unset": {"EndedAt": ""},
+                },
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+                projection={
+                    "_id": 0,
+                    "VisitId": 1,
+                    "StartedAt": 1,
+                    "LastSeenAt": 1,
+                    "EndedAt": 1,
+                },
+            )
+        except DuplicateKeyError:
+            return await self.website_visits.find_one_and_update(
+                {"VisitId": visit_id},
+                {"$set": {"LastSeenAt": now}, "$unset": {"EndedAt": ""}},
+                return_document=ReturnDocument.AFTER,
+                projection={
+                    "_id": 0,
+                    "VisitId": 1,
+                    "StartedAt": 1,
+                    "LastSeenAt": 1,
+                    "EndedAt": 1,
+                },
+            )
+
+    async def touch_website_visit(
+        self,
+        visit_id: str,
+        now: datetime,
+        end_visit: bool = False,
+    ) -> dict | None:
+        changes = {"LastSeenAt": now}
+        if end_visit:
+            changes["EndedAt"] = now
+        return await self.website_visits.find_one_and_update(
+            {"VisitId": visit_id, "EndedAt": None},
+            {"$set": changes},
+            return_document=ReturnDocument.AFTER,
+            projection={
+                "_id": 0,
+                "VisitId": 1,
+                "StartedAt": 1,
+                "LastSeenAt": 1,
+                "EndedAt": 1,
+            },
+        )
+
+    async def claim_website_visit(
+        self,
+        visit_id: str,
+        user_id: str,
+        now: datetime,
+    ) -> dict | None:
+        return await self.website_visits.find_one_and_update(
+            {"VisitId": visit_id, "EndedAt": None},
+            {"$set": {"UserId": user_id, "LastSeenAt": now}},
+            return_document=ReturnDocument.AFTER,
+            projection={
+                "_id": 0,
+                "VisitId": 1,
+                "StartedAt": 1,
+                "LastSeenAt": 1,
+                "EndedAt": 1,
+            },
+        )
+
+    async def release_website_visit(
+        self,
+        visit_id: str,
+        user_id: str,
+        now: datetime,
+    ) -> dict | None:
+        return await self.website_visits.find_one_and_update(
+            {"VisitId": visit_id, "UserId": user_id, "EndedAt": None},
+            {
+                "$set": {"LastSeenAt": now},
+                "$unset": {"UserId": ""},
+            },
+            return_document=ReturnDocument.AFTER,
+            projection={
+                "_id": 0,
+                "VisitId": 1,
+                "StartedAt": 1,
+                "LastSeenAt": 1,
+                "EndedAt": 1,
+            },
         )
 
     async def record_usage_event(self, event: dict) -> dict:

@@ -60,6 +60,7 @@ class Settings:
     saved_places_collection: str = "SavedPlaces"
     listening_history_collection: str = "ListeningHistory"
     visitor_sessions_collection: str = "VisitorSessions"
+    website_visits_collection: str = "WebsiteVisits"
     usage_events_collection: str = "UsageEvents"
     max_image_size_bytes: int = 10 * 1024 * 1024
     max_audio_size_bytes: int = 50 * 1024 * 1024
@@ -127,6 +128,10 @@ def get_settings() -> Settings:
         visitor_sessions_collection=os.getenv(
             "MONGODB_VISITOR_SESSIONS_COLLECTION",
             "VisitorSessions",
+        ),
+        website_visits_collection=os.getenv(
+            "MONGODB_WEBSITE_VISITS_COLLECTION",
+            "WebsiteVisits",
         ),
         usage_events_collection=os.getenv(
             "MONGODB_USAGE_EVENTS_COLLECTION",

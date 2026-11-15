@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Awaitable, Callable
 
 from pymongo.errors import PyMongoError
@@ -10,9 +11,16 @@ class DashboardService:
         self.repository = repository
         self.online_timeout_minutes = online_timeout_minutes
 
-    async def get_dashboard(self) -> dict:
+    async def get_dashboard(
+        self,
+        access_start_at: datetime | None = None,
+        access_end_at: datetime | None = None,
+    ) -> dict:
         access_count, access_error = await self._load_metric(
-            self.repository.count_access_events,
+            lambda: self.repository.count_access_events(
+                access_start_at,
+                access_end_at,
+            ),
         )
         places_count, places_error = await self._load_metric(
             self.repository.count_places,
@@ -22,6 +30,11 @@ class DashboardService:
         )
         online_accounts, online_accounts_error = await self._load_metric(
             lambda: self.repository.list_online_accounts(
+                self.online_timeout_minutes,
+            ),
+        )
+        online_guests_count, online_guests_error = await self._load_metric(
+            lambda: self.repository.count_online_guests(
                 self.online_timeout_minutes,
             ),
         )
@@ -41,6 +54,15 @@ class DashboardService:
             "online_accounts_count": len(online_accounts or []),
             "online_accounts": online_accounts or [],
             "online_accounts_error": online_accounts_error,
+            "online_guests_count": online_guests_count,
+            "online_guests_error": online_guests_error,
+            "online_visitors_count": (
+                len(online_accounts or []) + online_guests_count
+                if online_guests_count is not None
+                and online_accounts_error is None
+                else None
+            ),
+            "online_visitors_error": online_guests_error or online_accounts_error,
             "online_timeout_minutes": self.online_timeout_minutes,
             "usage_by_place": usage_by_place or [],
             "usage_by_place_error": usage_by_place_error,

@@ -5,13 +5,13 @@ from src.controllers.audio_controller import AudioView, router
 
 
 class AudioControllerTests(unittest.TestCase):
-    def test_audio_creation_only_exposes_upload_not_text_to_speech(self):
+    def test_audio_generation_route_and_upload_route_exist(self):
         routes = {
             (method, route.path)
             for route in router.routes
             for method in route.methods
         }
-        self.assertNotIn(("POST", "/api/admin/places/{place_id}/audios"), routes)
+        self.assertIn(("POST", "/api/admin/places/{place_id}/audios"), routes)
         self.assertIn(
             ("POST", "/api/admin/places/{place_id}/audios/upload"),
             routes,

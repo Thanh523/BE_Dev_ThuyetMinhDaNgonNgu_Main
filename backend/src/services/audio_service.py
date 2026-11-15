@@ -11,6 +11,11 @@ from mutagen import File as MutagenFile
 from mutagen import MutagenError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
+try:
+    import edge_tts
+except ImportError:  # pragma: no cover - optional dependency for TTS generation
+    edge_tts = None
+
 from src.config.settings import Settings
 from src.repositories.place_audio_repository import PlaceAudioRepository
 
@@ -95,6 +100,16 @@ def _stored_file_path(storage_dir: Path, file_url: str) -> Path:
     return path
 
 
+async def _generate_tts_audio(path: Path, text: str, voice: str) -> None:
+    if edge_tts is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Text-to-speech support is unavailable because edge-tts is not installed.",
+        )
+    communicate = edge_tts.Communicate(text=text, voice=voice)
+    await communicate.save(str(path))
+
+
 class AudioService:
     def __init__(self, repository: PlaceAudioRepository, settings: Settings):
         self.repository = repository
@@ -111,6 +126,74 @@ class AudioService:
                 status_code=503,
                 detail="Audio list is temporarily unavailable.",
             ) from error
+
+    async def generate(
+        self,
+        place_id: int | str,
+        language: str,
+        text: str,
+        title: str = "",
+        voice_name: str | None = None,
+        source_text: str | None = None,
+        translated_text: str | None = None,
+    ) -> dict:
+        language = language.strip()
+        text = text.strip()
+        source_text = (source_text or text).strip()
+        translated_text = (translated_text or text).strip()
+        title = title.strip()
+        voice_name = (voice_name or VOICES.get(language, "")).strip()
+        if language not in LANGUAGE_NAMES:
+            raise HTTPException(status_code=422, detail="Unsupported audio language.")
+        if not source_text:
+            raise HTTPException(status_code=422, detail="Text to convert to speech is required.")
+        if len(title) > 200:
+            raise HTTPException(status_code=422, detail="Title is too long.")
+        if len(voice_name) > 100:
+            raise HTTPException(status_code=422, detail="Voice name is too long.")
+        place = await self._validate_place_and_language(place_id, language)
+
+        audio_id = uuid.uuid4().hex
+        audio_directory = await self._place_audio_directory(place)
+        final_path = audio_directory / f"{audio_id}.mp3"
+        try:
+            if not voice_name:
+                raise HTTPException(status_code=422, detail="A voice is required to generate audio.")
+            await _generate_tts_audio(final_path, source_text, voice_name)
+            duration_seconds = await asyncio.to_thread(_audio_duration, final_path)
+            now = datetime.now(timezone.utc)
+            document = {
+                "AudioId": audio_id,
+                "PlaceId": place_id,
+                "Language": language,
+                "Title": title or f"Thuyết minh {LANGUAGE_NAMES[language]}",
+                "SourceText": source_text,
+                "TranslatedText": translated_text,
+                "FileUrl": f"{AUDIO_URL_PREFIX}{audio_directory.name}/{final_path.name}",
+                "Voice": voice_name,
+                "VoiceName": voice_name,
+                "DurationSeconds": duration_seconds,
+                "IsActive": True,
+                "CreatedAt": now,
+                "UpdatedAt": now,
+            }
+            await self.repository.insert(document)
+            return document
+        except DuplicateKeyError as error:
+            await self._remove_files(final_path)
+            raise HTTPException(
+                status_code=409,
+                detail="Audio already exists for this place and language.",
+            ) from error
+        except HTTPException:
+            await self._remove_files(final_path)
+            raise
+        except PyMongoError as error:
+            await self._remove_files(final_path)
+            raise HTTPException(status_code=503, detail="Audio could not be generated.") from error
+        except OSError as error:
+            await self._remove_files(final_path)
+            raise HTTPException(status_code=503, detail="Audio file could not be generated.") from error
 
     async def upload(
         self,

@@ -184,7 +184,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
         loadDashboard();
       }
     };
-    const interval = window.setInterval(refreshIfVisible, 5000);
+    const interval = window.setInterval(refreshIfVisible, 1000);
     document.addEventListener("visibilitychange", refreshIfVisible);
     return () => {
       window.clearInterval(interval);
@@ -316,7 +316,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
                 <h3>Người dùng đang online</h3>
               </div>
               <span className="muted-count">
-                Tự làm mới mỗi 5 giây · timeout dự phòng {data.online_timeout_minutes} phút
+                Tự làm mới mỗi giây · timeout dự phòng {data.online_timeout_minutes} phút
               </span>
             </div>
             <OnlineAccounts

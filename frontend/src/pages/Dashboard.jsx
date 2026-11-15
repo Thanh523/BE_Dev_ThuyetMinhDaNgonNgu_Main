@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 async function adminRequest(apiUrl, token, path) {
   const baseUrl = apiUrl.replace(/\/+$/, "");
@@ -97,12 +97,11 @@ function OnlineAccounts({
   error,
   guestCount,
   guestError,
-  timeoutMinutes,
 }) {
   if (!error && !guestError && !accounts.length && !guestCount) {
     return (
       <p className="dashboard-empty">
-        Chưa có người dùng hoạt động trong {timeoutMinutes} phút gần đây.
+        Hiện không có người dùng đang hoạt động.
       </p>
     );
   }
@@ -143,8 +142,13 @@ export default function Dashboard({ apiUrl, token, setError }) {
   const [dateRange, setDateRange] = useState({ from: "", to: "" });
   const [appliedRange, setAppliedRange] = useState({ from: "", to: "" });
   const [rangeError, setRangeError] = useState("");
+  const requestInFlight = useRef(false);
 
   const loadDashboard = useCallback(async () => {
+    if (requestInFlight.current) {
+      return;
+    }
+    requestInFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -165,12 +169,27 @@ export default function Dashboard({ apiUrl, token, setError }) {
       setData(null);
       setError(error.message);
     } finally {
+      requestInFlight.current = false;
       setBusy(false);
     }
   }, [apiUrl, token, setError, appliedRange]);
 
   useEffect(() => {
     loadDashboard();
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        loadDashboard();
+      }
+    };
+    const interval = window.setInterval(refreshIfVisible, 5000);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, [loadDashboard]);
 
   const placeItems = useMemo(() => data?.usage_by_place || [], [data]);
@@ -253,7 +272,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
             <MetricCard
               error={data.online_visitors_error}
               label="Người dùng đang online"
-              value={2*data.online_visitors_count}
+              value={data.online_visitors_count}
             />
           </div>
 
@@ -297,7 +316,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
                 <h3>Người dùng đang online</h3>
               </div>
               <span className="muted-count">
-                Cập nhật trong {data.online_timeout_minutes} phút gần đây
+                Tự làm mới mỗi 5 giây · timeout dự phòng {data.online_timeout_minutes} phút
               </span>
             </div>
             <OnlineAccounts
@@ -305,7 +324,6 @@ export default function Dashboard({ apiUrl, token, setError }) {
               error={data.online_accounts_error}
               guestCount={data.online_guests_count}
               guestError={data.online_guests_error}
-              timeoutMinutes={data.online_timeout_minutes}
             />
           </section>
         </>

@@ -57,7 +57,10 @@ HS256, the secret must be at least 32 bytes. User registration and login use
 the same JWT key but issue user-role tokens distinct from admin tokens.
 Dashboard xem một tài khoản là đang online khi phiên chưa kết thúc và
 `LastSeenAt` nằm trong số phút cấu hình bởi `ONLINE_SESSION_TIMEOUT_MINUTES`
-(mặc định 5 phút).
+(mặc định 5 phút). Khi người dùng rời/đóng trang, frontend gửi tín hiệu kết thúc
+phiên để Dashboard cập nhật trạng thái ở lần làm mới tiếp theo (tự làm mới mỗi
+5 giây); timeout là phương án dự phòng nếu trình duyệt đóng đột ngột hoặc mất
+mạng trước khi gửi được tín hiệu.
 The application loads `atlas-credentials.env` automatically; existing process
 environment variables take precedence. From the `backend` directory, install
 dependencies, create the first admin, and start the API:

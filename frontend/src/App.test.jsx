@@ -7,6 +7,7 @@ import "./UserApp.jsx";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  delete navigator.sendBeacon;
   window.sessionStorage.clear();
   window.history.pushState({}, "", "/user");
 });
@@ -33,6 +34,15 @@ describe("portal routing", () => {
       };
     });
     vi.stubGlobal("fetch", fetchMock);
+    const sendBeaconMock = vi.fn(() => true);
+    Object.defineProperty(navigator, "sendBeacon", {
+      configurable: true,
+      value: sendBeaconMock,
+    });
+    window.sessionStorage.setItem(
+      "saigon-echo-website-visit",
+      "9f1ea97b-24d4-45ee-a1c3-fc17d14ec8d4",
+    );
     window.history.pushState({}, "", "/user");
     const { container } = render(<App />);
 
@@ -56,6 +66,13 @@ describe("portal routing", () => {
         name: "Mỗi góc phố đều có một câu chuyện.",
       }, { timeout: 5000 }),
     ).toBeInTheDocument();
+    fireEvent(window, new Event("pagehide"));
+    expect(sendBeaconMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "/api/user/website-visits/9f1ea97b-24d4-45ee-a1c3-fc17d14ec8d4/end",
+      ),
+      expect.any(Blob),
+    );
     expect(screen.queryByRole("link", { name: /admin/i })).not.toBeInTheDocument();
   });
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import Dashboard from "./Dashboard.jsx";
 
@@ -38,6 +38,10 @@ describe("Dashboard", () => {
       json: async () => dashboard,
     });
     vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
     const setError = vi.fn();
 
     render(
@@ -77,5 +81,42 @@ describe("Dashboard", () => {
       );
     });
     expect(setError).toHaveBeenLastCalledWith("");
+  });
+
+  it("refreshes online status automatically while the dashboard is visible", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => dashboard,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    const setError = vi.fn();
+
+    try {
+      render(
+        <Dashboard
+          apiUrl="http://127.0.0.1:8000"
+          token="admin-token"
+          setError={setError}
+        />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

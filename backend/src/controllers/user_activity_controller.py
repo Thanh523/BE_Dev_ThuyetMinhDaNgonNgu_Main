@@ -279,6 +279,19 @@ async def update_website_visit(
     )
 
 
+@router.post(
+    "/website-visits/{visit_id}/end",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def end_website_visit(
+    visit_id: UUID,
+    database=Depends(get_database),
+) -> Response:
+    await _service(database).touch_website_visit(str(visit_id), True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.patch(
     "/website-visits/{visit_id}/claim",
     response_model=WebsiteVisitView,

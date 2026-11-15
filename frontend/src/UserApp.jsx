@@ -75,6 +75,9 @@ export default function UserApp() {
         return;
       }
       setVisitReady(true);
+      if (heartbeat) {
+        window.clearInterval(heartbeat);
+      }
       heartbeat = window.setInterval(() => {
         updateWebsiteVisit(
           DEFAULT_API_URL,
@@ -88,6 +91,38 @@ export default function UserApp() {
       }, 60 * 1000);
     };
 
+    const endVisit = () => {
+      if (!visitId.current) {
+        return;
+      }
+      const endUrl =
+        `${DEFAULT_API_URL.replace(/\/+$/, "")}/api/user/website-visits/` +
+        `${encodeURIComponent(visitId.current)}/end`;
+      const body = new Blob([], { type: "text/plain" });
+      if (!navigator.sendBeacon?.(endUrl, body)) {
+        fetch(endUrl, { method: "POST", keepalive: true }).catch((error) => {
+          console.error("Could not end the website visit.", error);
+        });
+      }
+    };
+
+    const handlePageHide = () => {
+      if (heartbeat) {
+        window.clearInterval(heartbeat);
+        heartbeat = undefined;
+      }
+      endVisit();
+    };
+    const handlePageShow = (event) => {
+      if (event.persisted) {
+        startVisit().catch((error) => {
+          console.error("Could not restart website visit tracking.", error);
+        });
+      }
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
     startVisit().catch((error) => {
       console.error("Could not start website visit tracking.", error);
     });
@@ -97,6 +132,8 @@ export default function UserApp() {
       if (heartbeat) {
         window.clearInterval(heartbeat);
       }
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
     };
   }, []);
 

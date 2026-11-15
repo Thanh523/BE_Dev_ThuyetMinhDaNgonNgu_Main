@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from src.controllers.user_activity_controller import (
     clear_listening_history,
     delete_listening_history_entry,
+    end_website_visit,
     get_user_place_details,
     list_user_categories,
     list_user_place_audios,
@@ -112,6 +113,7 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             ("GET", "/api/user/places/{place_id}/audios"),
             ("POST", "/api/user/website-visits"),
             ("PATCH", "/api/user/website-visits/{visit_id}"),
+            ("POST", "/api/user/website-visits/{visit_id}/end"),
         )
         for key in public_routes:
             with self.subTest(route=key):
@@ -156,6 +158,26 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
         service.delete_listening_history_entry.assert_awaited_once_with(
             "user-1",
             "history-1",
+        )
+        self.assertEqual(204, response.status_code)
+
+    @patch("src.controllers.user_activity_controller._service")
+    async def test_end_website_visit_closes_visit_without_authentication(
+        self,
+        service_factory,
+    ):
+        service = Mock()
+        service.touch_website_visit = AsyncMock(return_value={})
+        service_factory.return_value = service
+
+        response = await end_website_visit(
+            visit_id="9f1ea97b-24d4-45ee-a1c3-fc17d14ec8d4",
+            database=object(),
+        )
+
+        service.touch_website_visit.assert_awaited_once_with(
+            "9f1ea97b-24d4-45ee-a1c3-fc17d14ec8d4",
+            True,
         )
         self.assertEqual(204, response.status_code)
 

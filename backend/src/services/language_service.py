@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -25,13 +27,14 @@ class LanguageService:
             raise HTTPException(status_code=422, detail="Language name is required.")
         return name
 
+    @staticmethod
+    def _with_active_status(language: dict) -> dict:
+        return {**language, "IsActive": language.get("IsActive", True)}
+
     async def list_languages(self, search: str | None = None) -> list[dict]:
         try:
             languages = await self.repository.list(search)
-            return [
-                {**language, "IsActive": language.get("IsActive", True)}
-                for language in languages
-            ]
+            return [self._with_active_status(language) for language in languages]
         except PyMongoError as error:
             raise HTTPException(
                 status_code=503,
@@ -42,9 +45,13 @@ class LanguageService:
         code = self._normalize_code(code)
         name = self._normalize_name(name)
         try:
-            if await self.repository.exists_by_code(code):
+            code_exists, name_exists = await asyncio.gather(
+                self.repository.exists_by_code(code),
+                self.repository.exists_by_name(name),
+            )
+            if code_exists:
                 raise HTTPException(status_code=409, detail="Language code already exists.")
-            if await self.repository.exists_by_name(name):
+            if name_exists:
                 raise HTTPException(status_code=409, detail="Language name already exists.")
             return await self.repository.create(code, name)
         except DuplicateKeyError as error:
@@ -69,9 +76,13 @@ class LanguageService:
                     status_code=409,
                     detail="Language code cannot change while content references it. Change the name or hide the language instead.",
                 )
-            if await self.repository.exists_by_code(new_code, current_code):
+            code_exists, name_exists = await asyncio.gather(
+                self.repository.exists_by_code(new_code, current_code),
+                self.repository.exists_by_name(name, current_code),
+            )
+            if code_exists:
                 raise HTTPException(status_code=409, detail="Language code already exists.")
-            if await self.repository.exists_by_name(name, current_code):
+            if name_exists:
                 raise HTTPException(status_code=409, detail="Language name already exists.")
             changes = {"LanguageCode": new_code, "LanguageName": name}
             result = await self.repository.update(current_code, changes)
@@ -81,7 +92,7 @@ class LanguageService:
             raise HTTPException(status_code=503, detail="Language could not be updated.") from error
         if result is None:
             raise HTTPException(status_code=404, detail="Language was not found.")
-        return {**result, "IsActive": result.get("IsActive", True)}
+        return self._with_active_status(result)
 
     async def set_status(self, language_code: str, is_active: bool) -> dict:
         try:
@@ -93,7 +104,7 @@ class LanguageService:
             raise HTTPException(status_code=503, detail="Language status could not be updated.") from error
         if result is None:
             raise HTTPException(status_code=404, detail="Language was not found.")
-        return {**result, "IsActive": result.get("IsActive", True)}
+        return self._with_active_status(result)
 
     async def delete_language(self, language_code: str) -> None:
         code = self._normalize_code(language_code)

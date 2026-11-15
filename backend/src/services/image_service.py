@@ -15,6 +15,7 @@ from src.repositories.place_image_repository import PlaceImageRepository
 
 
 IMAGE_URL_PREFIX = "/uploads/images/"
+GRIDFS_IMAGE_URL_PREFIX = "/api/images/files/"
 SAFE_PLACE_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SUPPORTED_FORMATS = {
     "JPEG": "jpg",
@@ -47,10 +48,18 @@ def _remove_file(path: Path) -> None:
 
 
 class ImageService:
-    def __init__(self, repository: PlaceImageRepository, settings: Settings):
+    def __init__(
+        self,
+        repository: PlaceImageRepository,
+        settings: Settings,
+        gridfs_storage=None,
+    ):
         self.repository = repository
         self.settings = settings
         self.settings.image_storage_dir.mkdir(parents=True, exist_ok=True)
+        self.gridfs_storage = gridfs_storage
+        if settings.image_storage_backend == "gridfs" and gridfs_storage is None:
+            raise RuntimeError("GridFS image storage is not initialized.")
         self.staging_dir = (
             self.settings.image_storage_dir.parent
             / f".{self.settings.image_storage_dir.name}-staging"
@@ -130,6 +139,7 @@ class ImageService:
 
         first_sort_order = await self.repository.next_sort_order(place_id)
         staged_files: list[Path] = []
+        gridfs_file_ids: list[str] = []
         documents: list[dict] = []
         now = datetime.now(timezone.utc)
         persisted = False
@@ -141,26 +151,37 @@ class ImageService:
                 image_id = uuid.uuid4().hex
                 extension = SUPPORTED_FORMATS[image_format]
                 final_path = image_directory / f"{image_id}.{extension}"
-                await asyncio.to_thread(os.replace, temporary_path, final_path)
-                staged_files[-1] = final_path
+                if self.gridfs_storage is not None:
+                    gridfs_file_id = await self.gridfs_storage.upload_file(
+                        temporary_path,
+                        final_path.name,
+                    )
+                    gridfs_file_ids.append(gridfs_file_id)
+                    await asyncio.to_thread(_remove_file, temporary_path)
+                    file_url = f"{GRIDFS_IMAGE_URL_PREFIX}{gridfs_file_id}"
+                else:
+                    await asyncio.to_thread(os.replace, temporary_path, final_path)
+                    staged_files[-1] = final_path
+                    file_url = (
+                        f"{IMAGE_URL_PREFIX}{folder_name}/{final_path.name}"
+                    )
 
-                documents.append(
-                    {
-                        "ImageId": image_id,
-                        "PlaceId": place_id,
-                        "FileUrl": (
-                            f"{IMAGE_URL_PREFIX}{folder_name}/{final_path.name}"
-                        ),
-                        "SortOrder": (
-                            sort_orders[index]
-                            if sort_orders is not None
-                            else first_sort_order + index
-                        ),
-                        "Caption": captions[index].strip() if captions is not None else "",
-                        "CreatedAt": now,
-                        "UpdatedAt": now,
-                    }
-                )
+                document = {
+                    "ImageId": image_id,
+                    "PlaceId": place_id,
+                    "FileUrl": file_url,
+                    "SortOrder": (
+                        sort_orders[index]
+                        if sort_orders is not None
+                        else first_sort_order + index
+                    ),
+                    "Caption": captions[index].strip() if captions is not None else "",
+                    "CreatedAt": now,
+                    "UpdatedAt": now,
+                }
+                if self.gridfs_storage is not None:
+                    document["GridFSFileId"] = gridfs_file_id
+                documents.append(document)
 
             await self.repository.insert_many(documents)
             persisted = True
@@ -182,7 +203,7 @@ class ImageService:
             ) from error
         finally:
             if not persisted:
-                await self._cleanup(staged_files)
+                await self._cleanup(staged_files, gridfs_file_ids)
 
         return documents
 
@@ -283,7 +304,19 @@ class ImageService:
             raise HTTPException(status_code=404, detail="Image was not found.")
 
         try:
-            await asyncio.to_thread(self._path_from_file_url(image["FileUrl"]).unlink, missing_ok=True)
+            gridfs_file_id = image.get("GridFSFileId")
+            if gridfs_file_id:
+                if self.gridfs_storage is None:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="GridFS image storage is not initialized.",
+                    )
+                await self.gridfs_storage.delete_file(gridfs_file_id)
+            else:
+                path = self._path_from_file_url(image["FileUrl"])
+                await asyncio.to_thread(path.unlink, missing_ok=True)
+        except HTTPException:
+            raise
         except OSError as error:
             raise HTTPException(
                 status_code=500,
@@ -297,9 +330,18 @@ class ImageService:
                 detail="Image metadata changed while the file was being removed.",
             )
 
-    async def _cleanup(self, paths: list[Path]) -> None:
-        for path in paths:
-            await asyncio.to_thread(_remove_file, path)
+    async def _cleanup(
+        self,
+        paths: list[Path],
+        gridfs_file_ids: list[str],
+    ) -> None:
+        try:
+            for path in paths:
+                await asyncio.to_thread(_remove_file, path)
+        finally:
+            if self.gridfs_storage is not None:
+                for file_id in gridfs_file_ids:
+                    await self.gridfs_storage.delete_file(file_id)
 
     def _path_from_file_url(self, file_url: str) -> Path:
         if not file_url.startswith(IMAGE_URL_PREFIX):

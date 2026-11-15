@@ -263,9 +263,6 @@ export default function AudioManagement({ apiUrl, token, setError, setNotice }) 
   const selectedPlace = places.find(
     (place) => String(place.PlaceId) === placeId,
   );
-  const selectedAudioFolder = selectedPlace
-    ? `${selectedPlace.PlaceId}-${selectedPlace.Slug || selectedPlace.PlaceId}`
-    : "";
 
   return (
     <div className="places-manager">
@@ -422,10 +419,8 @@ export default function AudioManagement({ apiUrl, token, setError, setNotice }) 
           </button>
         </form>
         <p className="hint">
-          Tối đa 50 MB. Hệ thống kiểm tra định dạng và đọc thời lượng từ tệp.
-          {selectedAudioFolder
-            ? ` Tệp sẽ được lưu tại backend/uploads/audio/${selectedAudioFolder}.`
-            : ""}
+          Tối đa 50 MB. Hệ thống kiểm tra định dạng, đọc thời lượng và lưu theo
+          cấu hình backend.
         </p>
       </section>
 

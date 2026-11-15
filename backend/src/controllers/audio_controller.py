@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import PyMongoError
 
@@ -18,6 +18,7 @@ router = APIRouter(
     tags=["Audio management"],
     dependencies=[Depends(require_admin)],
 )
+playback_router = APIRouter(prefix="/api/audio", tags=["Audio playback"])
 
 
 class AudioGenerateRequest(BaseModel):
@@ -60,7 +61,7 @@ class AudioView(BaseModel):
     narration_id: int | None = Field(default=None, alias="NarrationId")
 
 
-def _service(database) -> AudioService:
+def _service(database, request: Request) -> AudioService:
     settings = get_settings()
     return AudioService(
         PlaceAudioRepository(
@@ -70,6 +71,7 @@ def _service(database) -> AudioService:
             settings.narrations_collection,
         ),
         settings,
+        getattr(request.app.state, "gridfs_audio_storage", None),
     )
 
 
@@ -90,8 +92,12 @@ async def _log(database, claims: dict, action: str, audio_id: str, description: 
 
 
 @router.get("/places/{place_id}/audios", response_model=list[AudioView])
-async def list_audios(place_id: str, database=Depends(get_database)) -> list[dict]:
-    return await _service(database).list_for_place(parse_place_id(place_id))
+async def list_audios(
+    place_id: str,
+    request: Request,
+    database=Depends(get_database),
+) -> list[dict]:
+    return await _service(database, request).list_for_place(parse_place_id(place_id))
 
 
 @router.post(
@@ -101,19 +107,20 @@ async def list_audios(place_id: str, database=Depends(get_database)) -> list[dic
 )
 async def generate_audio(
     place_id: str,
-    request: AudioGenerateRequest,
+    payload: AudioGenerateRequest,
+    request: Request,
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).generate(
+    audio = await _service(database, request).generate(
         parse_place_id(place_id),
-        request.language,
-        request.text or request.source_text or "",
-        request.title,
-        request.voice_name,
-        request.source_text,
-        request.translated_text,
-        request.source_language,
+        payload.language,
+        payload.text or payload.source_text or "",
+        payload.title,
+        payload.voice_name,
+        payload.source_text,
+        payload.translated_text,
+        payload.source_language,
     )
     await _log(
         database,
@@ -132,6 +139,7 @@ async def generate_audio(
 )
 async def upload_audio(
     place_id: str,
+    request: Request,
     file: UploadFile = File(...),
     language: str = Form(...),
     title: str = Form(default=""),
@@ -139,7 +147,7 @@ async def upload_audio(
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).upload(
+    audio = await _service(database, request).upload(
         parse_place_id(place_id),
         language,
         file,
@@ -162,11 +170,12 @@ async def upload_audio(
 )
 async def replace_audio_file(
     audio_id: str,
+    request: Request,
     file: UploadFile = File(...),
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).replace_file(audio_id, file)
+    audio = await _service(database, request).replace_file(audio_id, file)
     await _log(
         database,
         claims,
@@ -181,10 +190,11 @@ async def replace_audio_file(
 async def update_audio(
     audio_id: str,
     request: AudioUpdate,
+    http_request: Request,
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).update(
+    audio = await _service(database, http_request).update(
         audio_id,
         request.model_dump(exclude_unset=True, exclude_none=True),
     )
@@ -196,10 +206,11 @@ async def update_audio(
 async def link_audio_narration(
     audio_id: str,
     request: AudioNarrationLink,
+    http_request: Request,
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> dict:
-    audio = await _service(database).link_narration(audio_id, request.narration_id)
+    audio = await _service(database, http_request).link_narration(audio_id, request.narration_id)
     await _log(database, claims, "LINK_NARRATION", audio_id, "Updated audio narration link.")
     return audio
 
@@ -207,10 +218,11 @@ async def link_audio_narration(
 @router.delete("/audios/{audio_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_audio(
     audio_id: str,
+    request: Request,
     database=Depends(get_database),
     claims: dict = Depends(require_admin),
 ) -> Response:
-    await _service(database).delete(audio_id)
+    await _service(database, request).delete(audio_id)
     await _log(database, claims, "DELETE", audio_id, "Deleted audio and its file.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -218,3 +230,17 @@ async def delete_audio(
 @router.get("/audio-options")
 async def audio_options() -> dict:
     return {"languages": [{"code": code, "name": name} for code, name in LANGUAGE_NAMES.items()]}
+
+
+@playback_router.get("/files/{file_id}")
+async def stream_audio(file_id: str, request: Request):
+    storage = getattr(request.app.state, "gridfs_audio_storage", None)
+    if storage is None:
+        raise HTTPException(
+            status_code=404,
+            detail="GridFS audio storage is not enabled.",
+        )
+    return await storage.stream_response(
+        file_id,
+        request.headers.get("range"),
+    )

@@ -1,11 +1,14 @@
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
-from pymongo import ASCENDING, DESCENDING, AsyncMongoClient
+from gridfs import GridFSBucket
+from pymongo import ASCENDING, DESCENDING, AsyncMongoClient, MongoClient
 from pymongo.collation import Collation
 
 from src.config.settings import get_settings
+from src.services.gridfs_file_storage import GridFSFileStorage
 
 
 DEFAULT_LANGUAGES = (
@@ -22,9 +25,35 @@ DEFAULT_LANGUAGES = (
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     client = AsyncMongoClient(settings.mongodb_uri)
+    gridfs_client = None
     try:
         await client.admin.command("ping")
         database = client[settings.mongodb_database]
+        app.state.gridfs_audio_storage = None
+        app.state.gridfs_image_storage = None
+        if (
+            settings.audio_storage_backend == "gridfs"
+            or settings.image_storage_backend == "gridfs"
+        ):
+            gridfs_client = MongoClient(settings.mongodb_uri)
+            await asyncio.to_thread(
+                gridfs_client.admin.command,
+                "ping",
+            )
+            if settings.audio_storage_backend == "gridfs":
+                app.state.gridfs_audio_storage = GridFSFileStorage(
+                    GridFSBucket(
+                        gridfs_client[settings.mongodb_database],
+                        bucket_name=settings.audio_gridfs_bucket,
+                    )
+                )
+            if settings.image_storage_backend == "gridfs":
+                app.state.gridfs_image_storage = GridFSFileStorage(
+                    GridFSBucket(
+                        gridfs_client[settings.mongodb_database],
+                        bucket_name=settings.image_gridfs_bucket,
+                    )
+                )
         await database[settings.place_images_collection].create_index(
             [("ImageId", ASCENDING)],
             unique=True,
@@ -184,6 +213,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.database = database
         yield
     finally:
+        if gridfs_client is not None:
+            gridfs_client.close()
         await client.close()
 
 

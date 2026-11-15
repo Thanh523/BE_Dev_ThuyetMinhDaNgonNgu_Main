@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from pymongo.errors import PyMongoError
 
@@ -21,6 +21,7 @@ router = APIRouter(
     tags=["Image management"],
     dependencies=[Depends(require_admin)],
 )
+playback_router = APIRouter(prefix="/api/images", tags=["Image playback"])
 
 
 class ImageView(BaseModel):
@@ -50,8 +51,12 @@ def _repository(database) -> PlaceImageRepository:
     )
 
 
-def _service(database) -> ImageService:
-    return ImageService(_repository(database), get_settings())
+def _service(database, request: Request) -> ImageService:
+    return ImageService(
+        _repository(database),
+        get_settings(),
+        getattr(request.app.state, "gridfs_image_storage", None),
+    )
 
 
 async def _record_activity(
@@ -89,9 +94,10 @@ async def _record_activity(
 )
 async def list_place_images(
     place_id: str,
+    request: Request,
     database=Depends(get_database),
 ) -> list[dict]:
-    return await _service(database).list_for_place(parse_place_id(place_id))
+    return await _service(database, request).list_for_place(parse_place_id(place_id))
 
 
 @router.get(
@@ -99,8 +105,11 @@ async def list_place_images(
     response_model=list[ImageView],
     response_model_by_alias=False,
 )
-async def list_all_images(database=Depends(get_database)) -> list[dict]:
-    return await _service(database).list_all()
+async def list_all_images(
+    request: Request,
+    database=Depends(get_database),
+) -> list[dict]:
+    return await _service(database, request).list_all()
 
 
 @router.post(
@@ -111,13 +120,14 @@ async def list_all_images(database=Depends(get_database)) -> list[dict]:
 )
 async def upload_place_images(
     place_id: str,
+    request: Request,
     files: Annotated[list[UploadFile], File(description="JPEG, PNG, or WebP; up to 10 MB each.")],
     captions: Annotated[list[str] | None, Form()] = None,
     sort_orders: Annotated[list[int] | None, Form()] = None,
     database=Depends(get_database),
     admin_claims: dict = Depends(require_admin),
 ) -> list[dict]:
-    images = await _service(database).upload(
+    images = await _service(database, request).upload(
         parse_place_id(place_id),
         files,
         captions,
@@ -142,10 +152,11 @@ async def upload_place_images(
 async def update_image(
     image_id: str,
     update: ImageUpdate,
+    request: Request,
     database=Depends(get_database),
     admin_claims: dict = Depends(require_admin),
 ) -> dict:
-    image = await _service(database).update(
+    image = await _service(database, request).update(
         image_id,
         update.caption,
         update.sort_order,
@@ -163,10 +174,11 @@ async def update_image(
 @router.delete("/images/{image_id}", status_code=204)
 async def delete_image(
     image_id: str,
+    request: Request,
     database=Depends(get_database),
     admin_claims: dict = Depends(require_admin),
 ) -> Response:
-    await _service(database).delete(image_id)
+    await _service(database, request).delete(image_id)
     await _record_activity(
         database,
         admin_claims,
@@ -175,3 +187,14 @@ async def delete_image(
         description="Deleted image and its file.",
     )
     return Response(status_code=204)
+
+
+@playback_router.get("/files/{file_id}")
+async def stream_image(file_id: str, request: Request):
+    storage = getattr(request.app.state, "gridfs_image_storage", None)
+    if storage is None:
+        raise HTTPException(
+            status_code=404,
+            detail="GridFS image storage is not enabled.",
+        )
+    return await storage.stream_response(file_id)

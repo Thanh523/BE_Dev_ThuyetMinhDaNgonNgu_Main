@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from src.controllers.audio_controller import AudioView, router
+from src.controllers.audio_controller import AudioView, playback_router, router
 
 
 class AudioControllerTests(unittest.TestCase):
@@ -19,6 +19,14 @@ class AudioControllerTests(unittest.TestCase):
         self.assertIn(
             ("PATCH", "/api/admin/audios/{audio_id}/narration"),
             routes,
+        )
+        self.assertIn(
+            ("GET", "/api/audio/files/{file_id}"),
+            {
+                (method, route.path)
+                for route in playback_router.routes
+                for method in route.methods
+            },
         )
 
     def test_audio_responses_use_database_field_aliases(self):

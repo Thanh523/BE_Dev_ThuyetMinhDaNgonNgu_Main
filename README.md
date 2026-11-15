@@ -209,14 +209,24 @@ When sort orders are omitted, new images are appended after the current highest
 order. Image URLs are served under `/uploads/images/`.
 Audio uploads accept MP3, WAV, OGG, M4A, and FLAC up to 50 MB by default.
 The backend validates the file contents and stores the detected duration.
-Adjust the limit with `MAX_AUDIO_SIZE_BYTES`; audio URLs are served under
-`/uploads/audio/`.
+Adjust the limit with `MAX_AUDIO_SIZE_BYTES`. Audio storage defaults to local
+files under `/uploads/audio/`; set `AUDIO_STORAGE_BACKEND=gridfs` to store new
+audio in MongoDB GridFS and serve it through `/api/audio/files/{file_id}`.
+`AUDIO_GRIDFS_BUCKET` optionally selects the GridFS bucket name (default:
+`audio`). Existing local audio files are not migrated automatically.
+
+Images also default to local files under `/uploads/images/`. Set
+`IMAGE_STORAGE_BACKEND=gridfs` to store new images in MongoDB GridFS and serve
+them through `/api/images/files/{file_id}`. `IMAGE_GRIDFS_BUCKET` defaults to
+`images`; existing local image files are not migrated automatically.
 
 Run the backend unit tests from `backend` with
 `python -m unittest discover -s tests -v`.
 
 Set `MONGODB_PLACES_COLLECTION`, `MONGODB_PLACE_IMAGES_COLLECTION`,
 `MONGODB_AUDIO_COLLECTION`, `AUDIO_STORAGE_DIR`,
+`AUDIO_STORAGE_BACKEND`, `AUDIO_GRIDFS_BUCKET`,
+`IMAGE_STORAGE_BACKEND`, `IMAGE_GRIDFS_BUCKET`,
 `MONGODB_ADMIN_ACCOUNTS_COLLECTION`,
 `MONGODB_ADMIN_ACTIVITY_LOGS_COLLECTION`, `MONGODB_USER_ACCOUNTS_COLLECTION`,
 `MONGODB_SAVED_PLACES_COLLECTION`, `MONGODB_LISTENING_HISTORY_COLLECTION`,

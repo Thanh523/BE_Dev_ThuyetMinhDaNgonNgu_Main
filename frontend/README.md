@@ -11,10 +11,12 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL (normally `http://localhost:5173`). Start the backend from
-`backend` with `python -m uvicorn src.main:app --reload`.
-The backend allows both `localhost:5173` and `127.0.0.1:5173` by default; restart
-the backend after changing `CORS_ORIGINS`.
+Open the frontend at `http://localhost:3000`. Vite is pinned to port `3000` and
+will report a port conflict instead of silently switching ports. Start the API
+separately from `backend` with `python -m uvicorn src.main:app --reload`; it runs
+on `http://127.0.0.1:8000` by default. The backend allows both
+`localhost:3000`, `localhost:5173`, and `127.0.0.1:5173` by default; restart the backend after
+changing `CORS_ORIGINS`.
 
 The **Demo người dùng** tab works without an admin login. Enter the backend
 URL, register a user, then sign in to browse visible places, search, save and

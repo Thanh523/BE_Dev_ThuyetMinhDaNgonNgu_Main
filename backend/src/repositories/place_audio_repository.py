@@ -5,9 +5,16 @@ from pymongo import ReturnDocument
 
 
 class PlaceAudioRepository:
-    def __init__(self, database: Any, places_collection: str, audios_collection: str):
+    def __init__(
+        self,
+        database: Any,
+        places_collection: str,
+        audios_collection: str,
+        narrations_collection: str = "Narrations",
+    ):
         self.places = database[places_collection]
         self.audios = database[audios_collection]
+        self.narrations = database[narrations_collection]
 
     async def place_exists(self, place_id: int | str) -> bool:
         return await self.places.find_one({"PlaceId": place_id}, {"_id": 1}) is not None
@@ -51,6 +58,39 @@ class PlaceAudioRepository:
                     "UpdatedAt": datetime.now(timezone.utc),
                 }
             },
+            return_document=ReturnDocument.AFTER,
+        )
+
+    async def get_narration(self, narration_id: int) -> dict | None:
+        return await self.narrations.find_one(
+            {"NarrationId": narration_id},
+            {"_id": 0, "NarrationId": 1, "PlaceId": 1, "LanguageCode": 1},
+        )
+
+    async def has_narration_audio(self, narration_id: int, exclude_audio_id: str) -> bool:
+        return await self.audios.find_one(
+            {
+                "NarrationId": narration_id,
+                "AudioId": {"$ne": exclude_audio_id},
+            },
+            {"_id": 1},
+        ) is not None
+
+    async def link_narration(
+        self,
+        audio_id: str,
+        narration_id: int | None,
+    ) -> dict | None:
+        changes = {"NarrationId": narration_id} if narration_id is not None else {}
+        if narration_id is None:
+            return await self.audios.find_one_and_update(
+                {"AudioId": audio_id},
+                {"$unset": {"NarrationId": ""}},
+                return_document=ReturnDocument.AFTER,
+            )
+        return await self.audios.find_one_and_update(
+            {"AudioId": audio_id},
+            {"$set": changes},
             return_document=ReturnDocument.AFTER,
         )
 

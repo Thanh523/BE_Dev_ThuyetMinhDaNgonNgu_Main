@@ -45,6 +45,7 @@ class PlaceService:
         visibility: str,
         skip: int,
         limit: int,
+        require_narration: bool = False,
     ) -> tuple[list[dict], int]:
         try:
             return await self.repository.list(
@@ -53,6 +54,7 @@ class PlaceService:
                 visibility,
                 skip,
                 limit,
+                require_narration,
             )
         except PyMongoError as error:
             raise HTTPException(

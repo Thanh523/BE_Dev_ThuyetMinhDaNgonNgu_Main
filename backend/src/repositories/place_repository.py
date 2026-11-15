@@ -13,6 +13,7 @@ class PlaceRepository:
         self.settings = settings
         self.places = database[settings.places_collection]
         self.images = database[settings.place_images_collection]
+        self.narrations = database[settings.narrations_collection]
 
     async def list(
         self,
@@ -21,6 +22,7 @@ class PlaceRepository:
         visibility: str,
         skip: int,
         limit: int,
+        require_narration: bool = False,
     ) -> tuple[list[dict], int]:
         query: dict = {}
         if search.strip():
@@ -43,6 +45,20 @@ class PlaceRepository:
             ]
         elif visibility == "hidden":
             query["IsVisible"] = False
+        if require_narration:
+            narration_place_ids = await self.narrations.distinct("PlaceId")
+            if not narration_place_ids:
+                return [], 0
+            narration_place_ids = list(
+                {
+                    value
+                    for place_id in narration_place_ids
+                    for value in (place_id, str(place_id))
+                }
+            )
+            query.setdefault("$and", []).append(
+                {"PlaceId": {"$in": narration_place_ids}}
+            )
 
         total = await self.places.count_documents(query)
         cursor = (

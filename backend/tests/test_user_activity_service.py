@@ -61,7 +61,7 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
             "Categories": Mock(),
             "PlaceImages": Mock(),
             "PlaceAudios": Mock(),
-            "Narrations": Mock(),
+            "Narrations": Mock(distinct=AsyncMock(return_value=[15, 16])),
         }
         database = MagicMock()
         database.__getitem__.side_effect = lambda name: collections[name]
@@ -256,10 +256,12 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         category = {"CategoryId": 2, "CategoryName": "Museum"}
         images = [{"ImageId": "image-1", "FileUrl": "/image.jpg"}]
         audios = [{"AudioId": "audio-1", "FileUrl": "/audio.mp3"}]
+        narrations = [{"NarrationId": 1, "Title": "History", "Content": "Text"}]
         self.repository.get_visible_place = AsyncMock(return_value=place)
         self.repository.get_place_category = AsyncMock(return_value=category)
         self.repository.list_place_images = AsyncMock(return_value=images)
         self.repository.list_active_audios = AsyncMock(return_value=audios)
+        self.repository.list_place_narrations = AsyncMock(return_value=narrations)
 
         result = await self.service.get_place_details(15)
 
@@ -269,18 +271,21 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
                 "category": category,
                 "images": images,
                 "audios": audios,
+                "narrations": narrations,
             },
             result,
         )
         self.repository.get_place_category.assert_awaited_once_with(2)
         self.repository.list_place_images.assert_awaited_once_with(15)
         self.repository.list_active_audios.assert_awaited_once_with(15)
+        self.repository.list_place_narrations.assert_awaited_once_with(15)
 
     async def test_place_details_reject_hidden_or_missing_place(self):
         self.repository.get_visible_place = AsyncMock(return_value=None)
         self.repository.get_place_category = AsyncMock()
         self.repository.list_place_images = AsyncMock()
         self.repository.list_active_audios = AsyncMock()
+        self.repository.list_place_narrations = AsyncMock()
 
         with self.assertRaises(HTTPException) as raised:
             await self.service.get_place_details(15)
@@ -289,6 +294,7 @@ class UserActivityServiceTests(unittest.IsolatedAsyncioTestCase):
         self.repository.get_place_category.assert_not_awaited()
         self.repository.list_place_images.assert_not_awaited()
         self.repository.list_active_audios.assert_not_awaited()
+        self.repository.list_place_narrations.assert_not_awaited()
 
     async def test_recording_listening_rejects_unknown_audio(self):
         self.repository.get_active_audio = AsyncMock(return_value=None)

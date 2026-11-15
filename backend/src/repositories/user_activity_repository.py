@@ -25,7 +25,7 @@ class UserActivityRepository:
 
     async def get_visible_place(self, place_id: int) -> dict | None:
         # Chỉ công khai dữ liệu địa điểm đang hiển thị trong trải nghiệm user.
-        return await self.places.find_one(
+        place = await self.places.find_one(
             {"PlaceId": place_id, "IsVisible": {"$ne": False}},
             {
                 "_id": 0,
@@ -37,6 +37,13 @@ class UserActivityRepository:
                 "Description": 1,
             },
         )
+        if place is None:
+            return None
+        narration = await self.narrations.find_one(
+            {"PlaceId": {"$in": [place_id, str(place_id)]}},
+            {"_id": 1},
+        )
+        return place if narration is not None else None
 
     async def get_place_category(self, category_id: int | None) -> dict | None:
         if category_id is None:
@@ -76,22 +83,79 @@ class UserActivityRepository:
         return await cursor.to_list(length=None)
 
     async def list_active_audios(self, place_id: int) -> list[dict]:
-        cursor = (
-            self.audios.find(
-                {"PlaceId": place_id, "IsActive": {"$ne": False}},
-                {
-                    "_id": 0,
-                    "AudioId": 1,
-                    "PlaceId": 1,
-                    "Language": 1,
-                    "Title": 1,
-                    "FileUrl": 1,
-                    "VoiceName": 1,
-                    "DurationSeconds": 1,
-                },
+        projection = {
+            "_id": 0,
+            "AudioId": 1,
+            "PlaceId": 1,
+            "NarrationId": 1,
+            "Language": 1,
+            "LanguageCode": 1,
+            "Title": 1,
+            "FileUrl": 1,
+            "VoiceName": 1,
+            "DurationSeconds": 1,
+            "CreatedAt": 1,
+        }
+        query_place_ids = {"$in": [place_id, str(place_id)]}
+        audio_documents: list[dict] = []
+        cursor = self.audios.find(
+            {"PlaceId": query_place_ids, "IsActive": {"$ne": False}},
+            projection,
+        ).sort([("Language", 1), ("CreatedAt", 1)])
+        audio_documents.extend(await cursor.to_list(length=None))
+
+        if self.audio_files is not self.audios:
+            narration_cursor = self.narrations.find(
+                {"PlaceId": query_place_ids},
+                {"_id": 0, "NarrationId": 1, "PlaceId": 1, "LanguageCode": 1, "Title": 1},
             )
-            .sort([("Language", 1), ("CreatedAt", 1)])
+            narrations = await narration_cursor.to_list(length=None)
+            narration_ids = [item["NarrationId"] for item in narrations]
+            audio_query: dict = {
+                "IsActive": {"$ne": False},
+                "$or": [{"PlaceId": query_place_ids}],
+            }
+            if narration_ids:
+                audio_query["$or"].append({"NarrationId": {"$in": narration_ids}})
+            file_cursor = self.audio_files.find(audio_query, projection)
+            audio_documents.extend(await file_cursor.to_list(length=None))
+
+            narration_by_id = {
+                str(item["NarrationId"]): item
+                for item in narrations
+            }
+            for audio in audio_documents:
+                narration = narration_by_id.get(str(audio.get("NarrationId")))
+                if narration is not None:
+                    audio.setdefault("PlaceId", narration.get("PlaceId"))
+                    audio.setdefault("Language", narration.get("LanguageCode"))
+                    audio.setdefault("Title", narration.get("Title"))
+
+        unique_audios = {
+            str(audio["AudioId"]): audio
+            for audio in audio_documents
+            if audio.get("AudioId") is not None
+        }
+        return sorted(
+            unique_audios.values(),
+            key=lambda audio: (
+                audio.get("Language") or audio.get("LanguageCode") or "",
+                str(audio.get("CreatedAt") or ""),
+            ),
         )
+
+    async def list_place_narrations(self, place_id: int) -> list[dict]:
+        cursor = self.narrations.find(
+            {"PlaceId": {"$in": [place_id, str(place_id)]}},
+            {
+                "_id": 0,
+                "NarrationId": 1,
+                "PlaceId": 1,
+                "LanguageCode": 1,
+                "Title": 1,
+                "Content": 1,
+            },
+        ).sort([("LanguageCode", 1), ("NarrationId", 1)])
         return await cursor.to_list(length=None)
 
     async def get_active_audio(self, audio_id: str) -> dict | None:
@@ -140,6 +204,18 @@ class UserActivityRepository:
 
     async def list_saved_places(self, user_id: str, skip: int, limit: int) -> tuple[list[dict], int]:
         query = {"UserId": user_id}
+        narrated_place_ids = await self.narrations.distinct("PlaceId")
+        if not narrated_place_ids:
+            return [], 0
+        query["PlaceId"] = {
+            "$in": list(
+                {
+                    value
+                    for place_id in narrated_place_ids
+                    for value in (place_id, str(place_id))
+                }
+            )
+        }
         cursor = (
             self.saved_places.find(query, {"_id": 0, "SavedPlaceId": 1, "PlaceId": 1, "SavedAt": 1})
             .sort("SavedAt", -1)

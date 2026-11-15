@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.error import HTTPError
 
+import aiohttp
 from fastapi import HTTPException, UploadFile
 
 from src.config.settings import Settings
@@ -147,6 +148,27 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(12, audio["DurationSeconds"])
         self.assertIn("/uploads/audio/17-test-place/", audio["FileUrl"])
         self.assertTrue(self.stored_file(audio["FileUrl"]).exists())
+
+    async def test_edge_tts_rejection_returns_bad_gateway_and_cleans_up(self):
+        error = aiohttp.ClientResponseError(
+            request_info=MagicMock(),
+            history=(),
+            status=403,
+        )
+        fake_edge_tts = MagicMock()
+        fake_edge_tts.Communicate.return_value.save = AsyncMock(side_effect=error)
+
+        with patch("src.services.audio_service.edge_tts", fake_edge_tts):
+            with self.assertRaises(HTTPException) as raised:
+                await self.service.generate(17, "vi", "Xin chào")
+
+        self.assertEqual(502, raised.exception.status_code)
+        self.assertEqual(
+            "Edge TTS service rejected the request (HTTP 403).",
+            raised.exception.detail,
+        )
+        self.assertEqual({}, self.repository.documents)
+        self.assertEqual([], list((self.storage / "17-test-place").iterdir()))
 
     async def test_translates_source_text_before_generating_audio(self):
         spoken_text = []

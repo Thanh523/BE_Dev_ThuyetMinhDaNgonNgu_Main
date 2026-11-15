@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiohttp
 from fastapi import HTTPException, UploadFile
 from mutagen import File as MutagenFile
 from mutagen import MutagenError
@@ -113,7 +114,23 @@ async def _generate_tts_audio(path: Path, text: str, voice: str) -> None:
             detail="Text-to-speech support is unavailable because edge-tts is not installed.",
         )
     communicate = edge_tts.Communicate(text=text, voice=voice)
-    await communicate.save(str(path))
+    try:
+        await communicate.save(str(path))
+    except aiohttp.ClientResponseError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Edge TTS service rejected the request (HTTP {error.status}).",
+        ) from error
+    except aiohttp.ClientError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to the Edge TTS service.",
+        ) from error
+    except asyncio.TimeoutError as error:
+        raise HTTPException(
+            status_code=502,
+            detail="The Edge TTS service timed out.",
+        ) from error
 
 
 def _audio_document(

@@ -23,6 +23,8 @@ MB by default. Files are stored under
 provides audio upload and management without a text-to-speech form.
 Text narration follows the ERD in `Narrations` with `NarrationId`,
 `PlaceId`, `LanguageCode`, `Title`, and `Content`.
+The `AudioFiles` collection references it through `NarrationId`; a narration
+cannot be deleted while an audio file references it.
 
 Backend management code follows routes → controllers → services → repositories.
 Route modules aggregate and register endpoint routers; controllers handle HTTP
@@ -154,6 +156,10 @@ All management endpoints require `Authorization: Bearer <admin-jwt>`.
 | `PATCH` | `/api/admin/audios/{audio_id}` | Update title, language, voice name, or active status |
 | `PATCH` | `/api/admin/audios/{audio_id}/narration` | Link or unlink an audio file to a narration |
 | `DELETE` | `/api/admin/audios/{audio_id}` | Delete audio metadata and its stored file |
+| `GET` | `/api/admin/places/{place_id}/narrations` | List narration text for a place |
+| `POST` | `/api/admin/places/{place_id}/narrations` | Create narration text |
+| `PATCH` | `/api/admin/narrations/{narration_id}` | Update narration text |
+| `DELETE` | `/api/admin/narrations/{narration_id}` | Delete narration without audio references |
 
 The user list accepts optional `search` (name/email), `is_active`, `skip`, and
 `limit` query parameters. Admin user-management endpoints require an admin token;

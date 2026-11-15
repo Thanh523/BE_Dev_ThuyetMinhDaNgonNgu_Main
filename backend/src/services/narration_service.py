@@ -27,13 +27,13 @@ class NarrationService:
         content: str,
     ) -> dict:
         language = language_code.strip()
-        title = title.strip()
-        content = content.strip()
+        narration_title = title.strip()
+        narration_content = content.strip()
         if not language:
             raise HTTPException(status_code=422, detail="Language code is required.")
-        if not title:
+        if not narration_title:
             raise HTTPException(status_code=422, detail="Title is required.")
-        if not content:
+        if not narration_content:
             raise HTTPException(status_code=422, detail="Content is required.")
         try:
             if not await self.repository.place_exists(place_id):
@@ -49,12 +49,15 @@ class NarrationService:
                 {
                     "PlaceId": place_id,
                     "LanguageCode": language,
-                    "Title": title,
-                    "Content": content,
+                    "Title": narration_title,
+                    "Content": narration_content,
                 }
             )
         except DuplicateKeyError as error:
-            raise HTTPException(status_code=409, detail="Narration already exists.") from error
+            raise HTTPException(
+                status_code=409,
+                detail="Narration already exists for this place and language.",
+            ) from error
         except PyMongoError as error:
             raise HTTPException(status_code=503, detail="Narration could not be saved.") from error
 
@@ -77,7 +80,7 @@ class NarrationService:
             if narration is None:
                 raise HTTPException(status_code=404, detail="Narration was not found.")
             language = mapped.get("LanguageCode")
-            if language:
+            if language is not None:
                 if not await self.repository.language_exists(language):
                     raise HTTPException(status_code=422, detail="Language was not found.")
                 if await self.repository.narration_language_exists(
@@ -86,14 +89,14 @@ class NarrationService:
                     narration_id,
                 ):
                     raise HTTPException(status_code=409, detail="Narration already exists.")
-            result = await self.repository.update(narration_id, mapped)
+            updated = await self.repository.update(narration_id, mapped)
         except DuplicateKeyError as error:
             raise HTTPException(status_code=409, detail="Narration already exists.") from error
         except PyMongoError as error:
             raise HTTPException(status_code=503, detail="Narration could not be updated.") from error
-        if result is None:
+        if updated is None:
             raise HTTPException(status_code=404, detail="Narration was not found.")
-        return result
+        return updated
 
     async def list_languages(self) -> list[dict]:
         try:

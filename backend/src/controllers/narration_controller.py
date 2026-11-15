@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
+from pymongo.errors import PyMongoError
 
 from src.config.database import get_database
 from src.config.settings import get_settings
 from src.middlewares.admin_auth import require_admin
 from src.repositories.narration_repository import NarrationRepository
 from src.services.narration_service import NarrationService
+from src.services.admin_audit_service import log_admin_activity
 
 
 router = APIRouter(
@@ -41,6 +43,30 @@ def _service(database) -> NarrationService:
     return NarrationService(NarrationRepository(database, get_settings()))
 
 
+async def _log(
+    database,
+    claims: dict,
+    action: str,
+    narration_id: int,
+    description: str,
+) -> None:
+    try:
+        await log_admin_activity(
+            database,
+            get_settings().admin_activity_logs_collection,
+            admin_id=claims["AdminId"],
+            action=action,
+            entity_name="Narrations",
+            entity_id=str(narration_id),
+            description=description,
+        )
+    except PyMongoError as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Narration operation completed, but its activity log could not be saved.",
+        ) from error
+
+
 @router.get("/places/{place_id}/narrations", response_model=list[NarrationView])
 async def list_narrations(place_id: int, database=Depends(get_database)) -> list[dict]:
     return await _service(database).list_for_place(place_id)
@@ -60,13 +86,16 @@ async def create_narration(
     place_id: int,
     request: NarrationCreate,
     database=Depends(get_database),
+    claims: dict = Depends(require_admin),
 ) -> dict:
-    return await _service(database).create(
+    narration = await _service(database).create(
         place_id,
         request.language_code,
         request.title,
         request.content,
     )
+    await _log(database, claims, "CREATE", narration["NarrationId"], "Created narration.")
+    return narration
 
 
 @router.patch("/narrations/{narration_id}", response_model=NarrationView)
@@ -74,17 +103,22 @@ async def update_narration(
     narration_id: int,
     request: NarrationUpdate,
     database=Depends(get_database),
+    claims: dict = Depends(require_admin),
 ) -> dict:
-    return await _service(database).update(
+    narration = await _service(database).update(
         narration_id,
         request.model_dump(exclude_unset=True),
     )
+    await _log(database, claims, "UPDATE", narration_id, "Updated narration.")
+    return narration
 
 
 @router.delete("/narrations/{narration_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_narration(
     narration_id: int,
     database=Depends(get_database),
+    claims: dict = Depends(require_admin),
 ) -> Response:
     await _service(database).delete(narration_id)
+    await _log(database, claims, "DELETE", narration_id, "Deleted narration.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

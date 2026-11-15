@@ -25,6 +25,7 @@ class AudioGenerateRequest(BaseModel):
     title: str = Field(default="", min_length=0, max_length=200)
     text: str | None = Field(default=None, min_length=1, max_length=100000)
     source_text: str | None = Field(default=None, min_length=1, max_length=100000)
+    source_language: str | None = Field(default=None, min_length=2, max_length=10)
     translated_text: str | None = Field(default=None, min_length=0, max_length=100000)
     voice_name: str | None = Field(default=None, min_length=1, max_length=100)
 
@@ -112,6 +113,7 @@ async def generate_audio(
         request.voice_name,
         request.source_text,
         request.translated_text,
+        request.source_language,
     )
     await _log(
         database,

@@ -16,6 +16,11 @@ try:
 except ImportError:  # pragma: no cover - optional dependency for TTS generation
     edge_tts = None
 
+try:
+    from deep_translator import GoogleTranslator
+except ImportError:  # pragma: no cover - optional dependency for translation
+    GoogleTranslator = None
+
 from src.config.settings import Settings
 from src.repositories.place_audio_repository import PlaceAudioRepository
 
@@ -110,6 +115,22 @@ async def _generate_tts_audio(path: Path, text: str, voice: str) -> None:
     await communicate.save(str(path))
 
 
+def _translate_text(text: str, target_language: str, source_language: str | None = None) -> str:
+    if GoogleTranslator is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Text translation is unavailable because deep-translator is not installed.",
+        )
+    source = source_language or "auto"
+    try:
+        return GoogleTranslator(source=source, target=target_language).translate(text)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Text translation could not be completed.",
+        ) from error
+
+
 class AudioService:
     def __init__(self, repository: PlaceAudioRepository, settings: Settings):
         self.repository = repository
@@ -136,11 +157,11 @@ class AudioService:
         voice_name: str | None = None,
         source_text: str | None = None,
         translated_text: str | None = None,
+        source_language: str | None = None,
     ) -> dict:
         language = language.strip()
         text = text.strip()
         source_text = (source_text or text).strip()
-        translated_text = (translated_text or text).strip()
         title = title.strip()
         voice_name = (voice_name or VOICES.get(language, "")).strip()
         if language not in LANGUAGE_NAMES:
@@ -151,6 +172,25 @@ class AudioService:
             raise HTTPException(status_code=422, detail="Title is too long.")
         if len(voice_name) > 100:
             raise HTTPException(status_code=422, detail="Voice name is too long.")
+
+        translated_text = (translated_text or "").strip()
+        if not translated_text and source_text and source_text != text:
+            translated_text = await asyncio.to_thread(
+                _translate_text,
+                source_text,
+                language,
+                source_language,
+            )
+        elif not translated_text and source_text and source_text == text and source_language is not None:
+            translated_text = await asyncio.to_thread(
+                _translate_text,
+                source_text,
+                language,
+                source_language,
+            )
+        elif not translated_text:
+            translated_text = source_text
+
         place = await self._validate_place_and_language(place_id, language)
 
         audio_id = uuid.uuid4().hex
@@ -159,7 +199,8 @@ class AudioService:
         try:
             if not voice_name:
                 raise HTTPException(status_code=422, detail="A voice is required to generate audio.")
-            await _generate_tts_audio(final_path, source_text, voice_name)
+            speech_text = translated_text if translated_text else source_text
+            await _generate_tts_audio(final_path, speech_text, voice_name)
             duration_seconds = await asyncio.to_thread(_audio_duration, final_path)
             now = datetime.now(timezone.utc)
             document = {

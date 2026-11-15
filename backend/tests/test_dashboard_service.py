@@ -22,6 +22,7 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         )
+        self.repository.count_online_guests = AsyncMock(return_value=2)
         self.repository.list_usage_by_place = AsyncMock(
             return_value=[
                 {"place_id": 1, "place_name": "Bến Nhà Rồng", "count": 5},
@@ -42,6 +43,8 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["narrations_count"], 7)
         self.assertEqual(result["online_accounts_count"], 1)
         self.assertEqual(result["online_accounts"][0]["user_id"], "user-1")
+        self.assertEqual(result["online_guests_count"], 2)
+        self.assertEqual(result["online_visitors_count"], 3)
         self.assertEqual(result["usage_by_place"][0]["count"], 5)
         self.assertEqual(result["usage_by_language"][0]["language_code"], "vi")
         self.assertIsNone(result["access_error"])
@@ -61,6 +64,17 @@ class DashboardServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["places_count"], 4)
         self.assertEqual(result["narrations_count"], 7)
         self.assertEqual(result["online_accounts_count"], 0)
+
+    async def test_dashboard_applies_access_date_bounds(self):
+        start_at = object()
+        end_at = object()
+
+        await self.service.get_dashboard(start_at, end_at)
+
+        self.repository.count_access_events.assert_awaited_once_with(
+            start_at,
+            end_at,
+        )
 
     async def test_dashboard_keeps_other_statistics_when_metric_data_is_invalid(self):
         self.repository.count_narrations = AsyncMock(

@@ -6,15 +6,26 @@ class DashboardRepository:
     def __init__(self, database: Any, settings: Any):
         self.places = database[settings.places_collection]
         self.narrations = database[settings.narrations_collection]
-        self.usage_events = database[settings.usage_events_collection]
         self.listening_history = database[settings.listening_history_collection]
         self.audios = database[settings.audio_collection]
         self.languages = database[settings.languages_collection]
-        self.visitor_sessions = database[settings.visitor_sessions_collection]
+        self.website_visits = database[settings.website_visits_collection]
         self.user_accounts = database[settings.user_accounts_collection]
 
-    async def count_access_events(self) -> int:
-        return await self.usage_events.count_documents({})
+    async def count_access_events(
+        self,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+    ) -> int:
+        query: dict = {}
+        started_at: dict = {}
+        if start_at is not None:
+            started_at["$gte"] = start_at
+        if end_at is not None:
+            started_at["$lt"] = end_at
+        if started_at:
+            query["StartedAt"] = started_at
+        return await self.website_visits.count_documents(query)
 
     async def count_places(self) -> int:
         return await self.places.count_documents({})
@@ -24,7 +35,7 @@ class DashboardRepository:
 
     async def list_online_accounts(self, timeout_minutes: int) -> list[dict]:
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        cursor = self.visitor_sessions.find(
+        cursor = self.website_visits.find(
             {
                 "EndedAt": None,
                 "LastSeenAt": {"$gte": cutoff},
@@ -36,7 +47,11 @@ class DashboardRepository:
             },
         ).sort("LastSeenAt", -1)
         sessions = await cursor.to_list(length=None)
-        user_ids = list({str(session["UserId"]) for session in sessions})
+        user_ids = list(dict.fromkeys(
+            str(session["UserId"])
+            for session in sessions
+            if session.get("UserId") is not None
+        ))
         if not user_ids:
             return []
 
@@ -51,24 +66,36 @@ class DashboardRepository:
         ).to_list(length=None)
         accounts_by_id = {str(account["UserId"]): account for account in accounts}
         online: list[dict] = []
-        seen_users: set[str] = set()
-        for session in sessions:
-            user_id = str(session["UserId"])
-            if user_id in seen_users:
-                continue
-            seen_users.add(user_id)
+        for user_id in user_ids:
             account = accounts_by_id.get(user_id)
             if account is None:
                 continue
             online.append(
                 {
-                    "user_id": str(session["UserId"]),
+                    "user_id": user_id,
                     "full_name": account.get("FullName") or "Tài khoản không tên",
                     "email": account.get("Email") or "Không có email",
-                    "last_seen_at": session.get("LastSeenAt"),
+                    "last_seen_at": next(
+                        (
+                            session.get("LastSeenAt")
+                            for session in sessions
+                            if str(session.get("UserId")) == user_id
+                        ),
+                        None,
+                    ),
                 }
             )
         return online
+
+    async def count_online_guests(self, timeout_minutes: int) -> int:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+        return await self.website_visits.count_documents(
+            {
+                "UserId": None,
+                "EndedAt": None,
+                "LastSeenAt": {"$gte": cutoff},
+            }
+        )
 
     async def list_usage_by_place(self) -> list[dict]:
         places = await self.places.find(

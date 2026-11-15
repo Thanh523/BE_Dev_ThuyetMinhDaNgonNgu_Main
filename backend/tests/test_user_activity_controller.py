@@ -110,6 +110,8 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             ("GET", "/api/user/categories"),
             ("GET", "/api/user/places/{place_id}"),
             ("GET", "/api/user/places/{place_id}/audios"),
+            ("POST", "/api/user/website-visits"),
+            ("PATCH", "/api/user/website-visits/{visit_id}"),
         )
         for key in public_routes:
             with self.subTest(route=key):
@@ -124,6 +126,17 @@ class UserActivityControllerTests(unittest.IsolatedAsyncioTestCase):
             dependency.call is require_user
             for dependency in personal_route.dependant.dependencies
         ))
+
+        for key in (
+            ("PATCH", "/api/user/website-visits/{visit_id}/claim"),
+            ("PATCH", "/api/user/website-visits/{visit_id}/release"),
+        ):
+            with self.subTest(route=key):
+                dependencies = routes[key].dependant.dependencies
+                self.assertTrue(any(
+                    dependency.call is require_user
+                    for dependency in dependencies
+                ))
 
     @patch("src.controllers.user_activity_controller._service")
     async def test_delete_history_entry_uses_authenticated_user(

@@ -161,6 +161,54 @@ class UserActivityService:
         except PyMongoError as error:
             raise self._unavailable("Visitor session could not be started.") from error
 
+    async def start_website_visit(self, visit_id: str) -> dict:
+        try:
+            return await self.repository.start_website_visit(
+                visit_id,
+                datetime.now(timezone.utc),
+            )
+        except PyMongoError as error:
+            raise self._unavailable("Website visit could not be recorded.") from error
+
+    async def touch_website_visit(self, visit_id: str, end_visit: bool = False) -> dict:
+        try:
+            visit = await self.repository.touch_website_visit(
+                visit_id,
+                datetime.now(timezone.utc),
+                end_visit,
+            )
+        except PyMongoError as error:
+            raise self._unavailable("Website visit could not be updated.") from error
+        if visit is None:
+            raise HTTPException(status_code=404, detail="Website visit was not found or has ended.")
+        return visit
+
+    async def claim_website_visit(self, visit_id: str, user_id: str) -> dict:
+        try:
+            visit = await self.repository.claim_website_visit(
+                visit_id,
+                user_id,
+                datetime.now(timezone.utc),
+            )
+        except PyMongoError as error:
+            raise self._unavailable("Website visit could not be linked to the account.") from error
+        if visit is None:
+            raise HTTPException(status_code=404, detail="Website visit was not found or has ended.")
+        return visit
+
+    async def release_website_visit(self, visit_id: str, user_id: str) -> dict:
+        try:
+            visit = await self.repository.release_website_visit(
+                visit_id,
+                user_id,
+                datetime.now(timezone.utc),
+            )
+        except PyMongoError as error:
+            raise self._unavailable("Website visit could not be unlinked from the account.") from error
+        if visit is None:
+            raise HTTPException(status_code=404, detail="Website visit was not found.")
+        return visit
+
     async def touch_session(self, user_id: str, session_id: str, end_session: bool) -> dict:
         # Xác minh quyền sở hữu trước; repository cập nhật có điều kiện để tránh race kết thúc.
         try:

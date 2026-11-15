@@ -158,6 +158,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await database[settings.visitor_sessions_collection].create_index(
             [("UserId", ASCENDING), ("StartedAt", DESCENDING)],
         )
+        await database[settings.website_visits_collection].create_index(
+            [("VisitId", ASCENDING)],
+            unique=True,
+        )
+        await database[settings.website_visits_collection].create_index(
+            [("StartedAt", DESCENDING)],
+        )
+        await database[settings.website_visits_collection].create_index(
+            [("LastSeenAt", DESCENDING)],
+        )
         await database[settings.usage_events_collection].create_index(
             [("EventId", ASCENDING)],
             unique=True,

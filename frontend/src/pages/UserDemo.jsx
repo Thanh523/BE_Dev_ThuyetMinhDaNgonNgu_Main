@@ -82,7 +82,7 @@ function audioLanguageCode(audio) {
   return language?.code || audio.Language;
 }
 
-export default function UserDemo({ apiUrl, locale = "vi" }) {
+export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
   const t = (text, values) => translateUserText(locale, text, values);
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({
@@ -140,6 +140,10 @@ export default function UserDemo({ apiUrl, locale = "vi" }) {
   useEffect(() => {
     setAudioLanguage(locale);
   }, [locale]);
+
+  useEffect(() => {
+    onTokenChange?.(token);
+  }, [onTokenChange, token]);
 
   useEffect(() => {
     if (loginPromptOpen) {

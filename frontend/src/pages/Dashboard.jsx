@@ -92,20 +92,25 @@ function UsageList({ items, error, emptyMessage, labelKey }) {
   );
 }
 
-function OnlineAccounts({ accounts, error, timeoutMinutes }) {
-  if (error) {
-    return <p className="dashboard-item-error">{error}</p>;
-  }
-  if (!accounts.length) {
+function OnlineAccounts({
+  accounts,
+  error,
+  guestCount,
+  guestError,
+  timeoutMinutes,
+}) {
+  if (!error && !guestError && !accounts.length && !guestCount) {
     return (
       <p className="dashboard-empty">
-        Chưa có tài khoản hoạt động trong {timeoutMinutes} phút gần đây.
+        Chưa có người dùng hoạt động trong {timeoutMinutes} phút gần đây.
       </p>
     );
   }
 
   return (
     <div className="dashboard-online-list">
+      {error && <p className="dashboard-item-error">{error}</p>}
+      {guestError && <p className="dashboard-item-error">{guestError}</p>}
       {accounts.map((account) => (
         <div className="dashboard-online-row" key={account.user_id}>
           <div className="dashboard-online-avatar" aria-hidden="true">
@@ -118,6 +123,16 @@ function OnlineAccounts({ accounts, error, timeoutMinutes }) {
           <span className="dashboard-online-status">Đang hoạt động</span>
         </div>
       ))}
+      {guestCount > 0 && (
+        <div className="dashboard-online-row">
+          <div className="dashboard-online-avatar" aria-hidden="true">K</div>
+          <div className="dashboard-online-details">
+            <strong>Khách chưa đăng nhập</strong>
+            <span>{formatNumber(guestCount)} phiên truy cập đang hoạt động</span>
+          </div>
+          <span className="dashboard-online-status">Đang hoạt động</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -125,19 +140,34 @@ function OnlineAccounts({ accounts, error, timeoutMinutes }) {
 export default function Dashboard({ apiUrl, token, setError }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [dateRange, setDateRange] = useState({ from: "", to: "" });
+  const [appliedRange, setAppliedRange] = useState({ from: "", to: "" });
+  const [rangeError, setRangeError] = useState("");
 
   const loadDashboard = useCallback(async () => {
     setBusy(true);
     setError("");
     try {
-      setData(await adminRequest(apiUrl, token, "/api/admin/dashboard"));
+      const params = new URLSearchParams();
+      if (appliedRange.from) {
+        params.set("access_from", appliedRange.from);
+      }
+      if (appliedRange.to) {
+        params.set("access_to", appliedRange.to);
+      }
+      const query = params.toString();
+      setData(await adminRequest(
+        apiUrl,
+        token,
+        `/api/admin/dashboard${query ? `?${query}` : ""}`,
+      ));
     } catch (error) {
       setData(null);
       setError(error.message);
     } finally {
       setBusy(false);
     }
-  }, [apiUrl, token, setError]);
+  }, [apiUrl, token, setError, appliedRange]);
 
   useEffect(() => {
     loadDashboard();
@@ -145,6 +175,15 @@ export default function Dashboard({ apiUrl, token, setError }) {
 
   const placeItems = useMemo(() => data?.usage_by_place || [], [data]);
   const languageItems = useMemo(() => data?.usage_by_language || [], [data]);
+  const applyDateRange = (event) => {
+    event.preventDefault();
+    if (dateRange.from && dateRange.to && dateRange.from > dateRange.to) {
+      setRangeError("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+      return;
+    }
+    setRangeError("");
+    setAppliedRange({ ...dateRange });
+  };
 
   return (
     <section className="panel dashboard-panel">
@@ -162,6 +201,35 @@ export default function Dashboard({ apiUrl, token, setError }) {
           {busy ? "Đang tải..." : "Làm mới"}
         </button>
       </div>
+
+      <form className="dashboard-access-filter" onSubmit={applyDateRange}>
+        <label>
+          Từ ngày
+          <input
+            type="date"
+            value={dateRange.from}
+            onChange={(event) => setDateRange((current) => ({
+              ...current,
+              from: event.target.value,
+            }))}
+          />
+        </label>
+        <label>
+          Đến ngày
+          <input
+            type="date"
+            value={dateRange.to}
+            onChange={(event) => setDateRange((current) => ({
+              ...current,
+              to: event.target.value,
+            }))}
+          />
+        </label>
+        <button className="button button-outline" disabled={busy} type="submit">
+          Lọc lượt truy cập
+        </button>
+        {rangeError && <p className="dashboard-item-error">{rangeError}</p>}
+      </form>
 
       {!data && busy && <p className="dashboard-empty">Đang tải số liệu...</p>}
       {data && (
@@ -183,9 +251,9 @@ export default function Dashboard({ apiUrl, token, setError }) {
               value={data.narrations_count}
             />
             <MetricCard
-              error={data.online_accounts_error}
-              label="Tài khoản đang online"
-              value={data.online_accounts_count}
+              error={data.online_visitors_error}
+              label="Người dùng đang online"
+              value={data.online_visitors_count}
             />
           </div>
 
@@ -226,7 +294,7 @@ export default function Dashboard({ apiUrl, token, setError }) {
             <div className="dashboard-card-heading">
               <div>
                 <p className="eyebrow">TRẠNG THÁI NGƯỜI DÙNG</p>
-                <h3>Các tài khoản đang online</h3>
+                <h3>Người dùng đang online</h3>
               </div>
               <span className="muted-count">
                 Cập nhật trong {data.online_timeout_minutes} phút gần đây
@@ -235,6 +303,8 @@ export default function Dashboard({ apiUrl, token, setError }) {
             <OnlineAccounts
               accounts={data.online_accounts}
               error={data.online_accounts_error}
+              guestCount={data.online_guests_count}
+              guestError={data.online_guests_error}
               timeoutMinutes={data.online_timeout_minutes}
             />
           </section>

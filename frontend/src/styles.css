@@ -284,6 +284,31 @@ input::placeholder {
   margin-bottom: 18px;
 }
 
+.dashboard-access-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dashboard-access-filter label {
+  display: grid;
+  min-width: 160px;
+  gap: 5px;
+  color: #68756c;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dashboard-access-filter input {
+  min-height: 38px;
+}
+
+.dashboard-access-filter .dashboard-item-error {
+  flex-basis: 100%;
+}
+
 .dashboard-metric {
   min-height: 112px;
   padding: 17px;

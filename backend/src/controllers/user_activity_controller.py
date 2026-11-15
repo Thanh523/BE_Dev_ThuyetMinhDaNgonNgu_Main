@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -36,6 +37,14 @@ class ListeningCreate(BaseModel):
 
 class SessionUpdate(BaseModel):
     end_session: bool = False
+
+
+class WebsiteVisitCreate(BaseModel):
+    visit_id: UUID
+
+
+class WebsiteVisitUpdate(BaseModel):
+    end_visit: bool = False
 
 
 class UsageEventCreate(BaseModel):
@@ -91,6 +100,15 @@ class VisitorSessionView(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     session_id: str = Field(alias="SessionId")
+    started_at: datetime = Field(alias="StartedAt")
+    last_seen_at: datetime = Field(alias="LastSeenAt")
+    ended_at: datetime | None = Field(default=None, alias="EndedAt")
+
+
+class WebsiteVisitView(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    visit_id: UUID = Field(alias="VisitId")
     started_at: datetime = Field(alias="StartedAt")
     last_seen_at: datetime = Field(alias="LastSeenAt")
     ended_at: datetime | None = Field(default=None, alias="EndedAt")
@@ -234,6 +252,62 @@ async def record_listening(
         request.audio_id,
         request.played_seconds,
         request.is_completed,
+    )
+
+
+@router.post(
+    "/website-visits",
+    response_model=WebsiteVisitView,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_website_visit(
+    request: WebsiteVisitCreate,
+    database=Depends(get_database),
+) -> dict:
+    return await _service(database).start_website_visit(str(request.visit_id))
+
+
+@router.patch("/website-visits/{visit_id}", response_model=WebsiteVisitView)
+async def update_website_visit(
+    visit_id: UUID,
+    request: WebsiteVisitUpdate,
+    database=Depends(get_database),
+) -> dict:
+    return await _service(database).touch_website_visit(
+        str(visit_id),
+        request.end_visit,
+    )
+
+
+@router.patch(
+    "/website-visits/{visit_id}/claim",
+    response_model=WebsiteVisitView,
+    dependencies=[Depends(require_user)],
+)
+async def claim_website_visit(
+    visit_id: UUID,
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> dict:
+    return await _service(database).claim_website_visit(
+        str(visit_id),
+        str(claims["UserId"]),
+    )
+
+
+@router.patch(
+    "/website-visits/{visit_id}/release",
+    response_model=WebsiteVisitView,
+    dependencies=[Depends(require_user)],
+)
+async def release_website_visit(
+    visit_id: UUID,
+    database=Depends(get_database),
+    claims: dict = Depends(require_user),
+) -> dict:
+    return await _service(database).release_website_visit(
+        str(visit_id),
+        str(claims["UserId"]),
     )
 
 

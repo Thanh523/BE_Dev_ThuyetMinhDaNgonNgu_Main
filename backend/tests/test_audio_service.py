@@ -4,7 +4,7 @@ import unittest
 import wave
 from copy import deepcopy
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException, UploadFile
 
@@ -145,7 +145,10 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.stored_file(audio["FileUrl"]).exists())
 
     async def test_translates_source_text_before_generating_audio(self):
+        spoken_text = []
+
         async def fake_generate_tts(path, text, voice):
+            spoken_text.append(text)
             path.write_bytes(b"placeholder")
 
         with patch("src.services.audio_service._generate_tts_audio", new=fake_generate_tts), \
@@ -162,7 +165,23 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("Xin chào", audio["SourceText"])
         self.assertEqual("Hello there", audio["TranslatedText"])
+        self.assertEqual(["Hello there"], spoken_text)
         translate.assert_called_once_with("Xin chào", "en", "vi")
+
+    async def test_validates_place_before_translating_text(self):
+        self.repository.exists = False
+
+        with patch("src.services.audio_service._translate_text") as translate:
+            with self.assertRaises(HTTPException) as raised:
+                await self.service.generate(
+                    17,
+                    "en",
+                    "Xin chào",
+                    source_language="vi",
+                )
+
+        self.assertEqual(404, raised.exception.status_code)
+        translate.assert_not_called()
 
     async def test_rejects_unsupported_extensions_and_invalid_audio_content(self):
         with self.assertRaises(HTTPException) as raised:
@@ -242,6 +261,24 @@ class AudioServiceTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as raised:
             await self.service.update(audio["AudioId"], {"language": "vi"})
         self.assertEqual(409, raised.exception.status_code)
+
+    async def test_metadata_update_skips_audio_lookup_without_language_change(self):
+        audio = await self.service.upload(17, "en", self.audio_upload(), "", "")
+        get_audio = self.repository.get
+
+        with patch.object(
+            self.repository,
+            "get",
+            new_callable=AsyncMock,
+            side_effect=get_audio,
+        ) as get_mock:
+            updated = await self.service.update(
+                audio["AudioId"],
+                {"title": "Updated guide"},
+            )
+
+        self.assertEqual("Updated guide", updated["Title"])
+        get_mock.assert_not_awaited()
 
     async def test_deletes_audio_metadata_and_file(self):
         audio = await self.service.upload(17, "en", self.audio_upload(), "", "")

@@ -657,6 +657,16 @@ input::placeholder {
   margin-bottom: 18px;
 }
 
+.narration-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.narration-filters .management-select {
+  flex: 1 1 260px;
+}
+
 .narration-form {
   display: grid;
   grid-template-columns: 0.7fr 1.3fr;

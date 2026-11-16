@@ -8,6 +8,59 @@ afterEach(() => {
 });
 
 describe("NarrationManagement audio selection", () => {
+  it("filters the narration list by the selected language", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      if (url.includes("/api/admin/places?")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [{ PlaceId: 12, PlaceName: "Bưu điện" }],
+          }),
+        };
+      }
+      if (url.endsWith("/api/admin/narration-languages")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { LanguageCode: "en", LanguageName: "English" },
+            { LanguageCode: "vi", LanguageName: "Tiếng Việt" },
+          ],
+        };
+      }
+      if (url.endsWith("/api/admin/places/12/narrations")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { NarrationId: 1, LanguageCode: "en", Title: "Post Office", Content: "English narration" },
+            { NarrationId: 2, LanguageCode: "vi", Title: "Bưu điện tiếng Việt", Content: "Thuyết minh tiếng Việt" },
+          ],
+        };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    }));
+
+    render(
+      <NarrationManagement
+        apiUrl="http://localhost:8000"
+        token="admin-token"
+        setError={vi.fn()}
+        setNotice={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("Post Office")).toBeInTheDocument();
+    expect(screen.getByText("Bưu điện tiếng Việt")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Lọc theo ngôn ngữ"), {
+      target: { value: "vi" },
+    });
+
+    expect(screen.getByText("Bưu điện tiếng Việt")).toBeInTheDocument();
+    expect(screen.queryByText("Post Office")).not.toBeInTheDocument();
+  });
+
   it("fills narration content from the selected generated audio", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url) => {
       if (url.includes("/api/admin/places?")) {

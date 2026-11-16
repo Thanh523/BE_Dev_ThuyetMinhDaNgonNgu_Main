@@ -120,7 +120,7 @@ class UserAuthService:
         last_login = user.get("LastLoginAt") or user.get("CreatedAt")
         if isinstance(last_login, datetime) and last_login.tzinfo is None:
             last_login = last_login.replace(tzinfo=timezone.utc)
-        password_change_required = (
+        password_change_required = bool(user.get("PasswordChangeRequired")) or (
             isinstance(last_login, datetime)
             and now - last_login > timedelta(days=1)
         )

@@ -122,6 +122,26 @@ class UserAuthServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["password_change_required"])
         self.assertTrue(repository.record_login.await_args.args[2])
 
+    async def test_login_keeps_password_change_required_until_password_is_changed(self):
+        user = {
+            "UserId": "user-1",
+            "PasswordHash": password_hasher.hash("a-long-password"),
+            "IsActive": True,
+            "LastLoginAt": datetime.now(timezone.utc),
+            "PasswordChangeRequired": True,
+        }
+        repository = Mock()
+        repository.find_by_email = AsyncMock(return_value=user)
+        repository.record_login = AsyncMock(
+            return_value={"UserId": "user-1", "IsActive": True},
+        )
+        service = UserAuthService(repository, settings())
+
+        result = await service.login("test@example.com", "a-long-password")
+
+        self.assertTrue(result["password_change_required"])
+        self.assertTrue(repository.record_login.await_args.args[2])
+
     async def test_login_rejects_soft_deleted_account(self):
         user = {
             "UserId": "user-1",

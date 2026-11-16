@@ -10,9 +10,11 @@ from src.middlewares.admin_auth import bearer_scheme
 from src.repositories.user_auth_repository import UserAuthRepository
 
 
-async def require_user(
+async def _authenticate_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     database=Depends(get_database),
+    *,
+    allow_password_change: bool = False,
 ) -> dict:
     # Bước 1: yêu cầu Bearer token và kiểm tra cấu hình khóa ký.
     if credentials is None:
@@ -75,4 +77,27 @@ async def require_user(
             detail="User account is inactive or no longer exists.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if user.get("PasswordChangeRequired", False) and not allow_password_change:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change is required before using this account.",
+        )
     return claims
+
+
+async def require_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    database=Depends(get_database),
+) -> dict:
+    return await _authenticate_user(credentials, database)
+
+
+async def require_user_password_change(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    database=Depends(get_database),
+) -> dict:
+    return await _authenticate_user(
+        credentials,
+        database,
+        allow_password_change=True,
+    )

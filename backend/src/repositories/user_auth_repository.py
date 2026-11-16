@@ -25,14 +25,22 @@ class UserAuthRepository:
             return {"$or": [{"UserId": user_id}, {"UserId": int(user_id)}]}
         return {"UserId": user_id}
 
-    async def record_login(self, user_id: str, now) -> dict | None:
+    async def record_login(
+        self,
+        user_id: str,
+        now,
+        password_change_required: bool,
+    ) -> dict | None:
         # Cập nhật lần đăng nhập chỉ khi tài khoản vẫn active và chưa bị xóa mềm.
         return await self.users.find_one_and_update(
             {"$and": [
                 self._user_id_query(user_id),
                 {"IsActive": True, "IsDeleted": {"$ne": True}},
             ]},
-            {"$set": {"LastLoginAt": now}},
+            {"$set": {
+                "LastLoginAt": now,
+                "PasswordChangeRequired": password_change_required,
+            }},
             return_document=ReturnDocument.AFTER,
             projection={
                 "_id": 0,
@@ -42,6 +50,7 @@ class UserAuthRepository:
                 "IsActive": 1,
                 "CreatedAt": 1,
                 "LastLoginAt": 1,
+                "PasswordChangeRequired": 1,
             },
         )
 
@@ -49,7 +58,13 @@ class UserAuthRepository:
         # Middleware gọi lại DB theo mỗi request để token bị vô hiệu ngay khi khóa/xóa.
         return await self.users.find_one(
             self._user_id_query(user_id),
-            {"_id": 0, "UserId": 1, "IsActive": 1, "IsDeleted": 1},
+            {
+                "_id": 0,
+                "UserId": 1,
+                "IsActive": 1,
+                "IsDeleted": 1,
+                "PasswordChangeRequired": 1,
+            },
         )
 
     async def get_profile(self, user_id: str) -> dict | None:
@@ -97,6 +112,9 @@ class UserAuthRepository:
                     "IsDeleted": {"$ne": True},
                 },
             ]},
-            {"$set": {"PasswordHash": new_hash}},
+            {"$set": {
+                "PasswordHash": new_hash,
+                "PasswordChangeRequired": False,
+            }},
         )
         return result.modified_count == 1

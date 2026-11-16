@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -98,7 +99,28 @@ class UserAuthServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("user-1", claims["UserId"])
         self.assertEqual("Bearer".casefold(), result["token_type"].casefold())
         self.assertNotIn("PasswordHash", result["user"])
+        self.assertFalse(result["password_change_required"])
         repository.record_login.assert_awaited_once()
+        self.assertFalse(repository.record_login.await_args.args[2])
+
+    async def test_login_requires_password_change_after_more_than_one_day(self):
+        user = {
+            "UserId": "user-1",
+            "PasswordHash": password_hasher.hash("a-long-password"),
+            "IsActive": True,
+            "LastLoginAt": datetime.now(timezone.utc) - timedelta(days=1, seconds=1),
+        }
+        repository = Mock()
+        repository.find_by_email = AsyncMock(return_value=user)
+        repository.record_login = AsyncMock(
+            return_value={"UserId": "user-1", "IsActive": True},
+        )
+        service = UserAuthService(repository, settings())
+
+        result = await service.login("test@example.com", "a-long-password")
+
+        self.assertTrue(result["password_change_required"])
+        self.assertTrue(repository.record_login.await_args.args[2])
 
     async def test_login_rejects_soft_deleted_account(self):
         user = {

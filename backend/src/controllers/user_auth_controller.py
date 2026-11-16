@@ -7,7 +7,7 @@ from pymongo.errors import PyMongoError
 
 from src.config.database import get_database
 from src.config.settings import get_settings
-from src.middlewares.user_auth import require_user
+from src.middlewares.user_auth import require_user, require_user_password_change
 from src.repositories.user_auth_repository import UserAuthRepository
 from src.repositories.user_account_repository import UserAccountRepository
 from src.services.user_account_service import UserAccountService
@@ -135,7 +135,7 @@ async def update_current_user(
 async def change_current_user_password(
     request: UserPasswordChange,
     database=Depends(get_database),
-    claims: dict = Depends(require_user),
+    claims: dict = Depends(require_user_password_change),
 ) -> None:
     # Yêu cầu mật khẩu hiện tại để chỉ chủ tài khoản đã xác thực mới đổi được mật khẩu.
     await _service(database).change_password(

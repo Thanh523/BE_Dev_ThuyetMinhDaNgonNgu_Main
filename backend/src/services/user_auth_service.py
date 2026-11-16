@@ -117,8 +117,19 @@ class UserAuthService:
         # Ghi LastLoginAt có điều kiện để khóa/xóa tài khoản chen ngang không cấp token.
         user_id = str(user["UserId"])
         now = datetime.now(timezone.utc)
+        last_login = user.get("LastLoginAt") or user.get("CreatedAt")
+        if isinstance(last_login, datetime) and last_login.tzinfo is None:
+            last_login = last_login.replace(tzinfo=timezone.utc)
+        password_change_required = (
+            isinstance(last_login, datetime)
+            and now - last_login > timedelta(days=1)
+        )
         try:
-            public_user = await self.repository.record_login(user_id, now)
+            public_user = await self.repository.record_login(
+                user_id,
+                now,
+                password_change_required,
+            )
         except PyMongoError as error:
             raise HTTPException(
                 status_code=503,
@@ -155,6 +166,7 @@ class UserAuthService:
             "token_type": "bearer",
             "expires_in": int(ACCESS_TOKEN_LIFETIME.total_seconds()),
             "user": self._public_user(public_user),
+            "password_change_required": password_change_required,
         }
 
     async def change_password(

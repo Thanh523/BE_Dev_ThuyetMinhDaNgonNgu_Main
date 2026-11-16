@@ -8,6 +8,43 @@ afterEach(() => {
 });
 
 describe("guest place browsing", () => {
+  it("requires a password change before granting account access", async () => {
+    const fetchMock = vi.fn(async (input) => {
+      const { pathname } = new URL(String(input));
+      const payload = pathname === "/api/user/auth/login"
+        ? { access_token: "restricted-token", password_change_required: true }
+        : pathname === "/api/user/categories"
+          ? []
+          : { items: [], total: 0 };
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => payload,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<UserDemo apiUrl="http://localhost:8000" />);
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "user@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Mật khẩu"), {
+      target: { value: "a-long-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
+
+    expect(await screen.findByRole("heading", { name: "Đổi mật khẩu" }))
+      .toBeInTheDocument();
+    expect(screen.getByLabelText("Mật khẩu mới")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => (
+      String(input).includes("/api/user/listening-history")
+      || String(input).includes("/api/user/saved-places")
+      || String(input).includes("/api/user/sessions")
+    ))).toBe(false);
+  });
+
   it("records anonymous listening usage without adding personal listening history", async () => {
     const fetchMock = vi.fn(async (input, options = {}) => {
       const { pathname } = new URL(String(input));

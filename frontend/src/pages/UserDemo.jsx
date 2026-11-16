@@ -91,6 +91,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
     password: "",
   });
   const [token, setToken] = useState("");
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState({ full_name: "" });
   const [editingProfile, setEditingProfile] = useState(false);
@@ -160,7 +161,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
 
   // Tạo phiên hoạt động và gửi heartbeat để Dashboard nhận diện tài khoản đang online.
   useEffect(() => {
-    if (!token) {
+    if (!token || requiresPasswordChange) {
       sessionId.current = null;
       return undefined;
     }
@@ -217,7 +218,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
         });
       }
     };
-  }, [apiUrl, token]);
+  }, [apiUrl, token, requiresPasswordChange]);
 
   const loadListeningHistory = useCallback((activeToken, skip) => userRequest(
     apiUrl,
@@ -227,7 +228,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
 
   // Tải riêng trang lịch sử để danh sách dài không bị giới hạn ở 20 lượt đầu.
   useEffect(() => {
-    if (!token) {
+    if (!token || requiresPasswordChange) {
       setListeningHistory([]);
       setListeningHistoryTotal(0);
       setListeningHistorySkip(0);
@@ -259,7 +260,13 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
     return () => {
       active = false;
     };
-  }, [token, listeningHistorySkip, listeningHistoryRefresh, loadListeningHistory]);
+  }, [
+    token,
+    requiresPasswordChange,
+    listeningHistorySkip,
+    listeningHistoryRefresh,
+    loadListeningHistory,
+  ]);
 
   // Phát sau khi chi tiết địa điểm và phần tử audio đã được render.
   useEffect(() => {
@@ -289,7 +296,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
 
   // Tải trang bookmark đang chọn; bỏ kết quả cũ nếu user đổi trang giữa lúc chờ API.
   useEffect(() => {
-    if (!token) {
+    if (!token || requiresPasswordChange) {
       setSavedPlaces([]);
       setSavedPlacesTotal(0);
       setSavedPlacesSkip(0);
@@ -319,7 +326,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
     return () => {
       active = false;
     };
-  }, [token, savedPlacesSkip, loadSavedPlaces]);
+  }, [token, requiresPasswordChange, savedPlacesSkip, loadSavedPlaces]);
 
   // Chỉ tìm khi submit; cờ active bỏ qua kết quả cũ nếu user đổi trang hoặc bộ lọc.
   // Gửi category_id cùng truy vấn để backend lọc trước khi phân trang.
@@ -380,9 +387,13 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
             password: authForm.password,
           }),
         });
+        const mustChangePassword = Boolean(result.password_change_required);
+        setRequiresPasswordChange(mustChangePassword);
         setToken(result.access_token);
         setAuthForm((current) => ({ ...current, password: "" }));
-        setNotice("Đăng nhập user thành công.");
+        setNotice(mustChangePassword
+          ? "Bạn đã không đăng nhập hơn 1 ngày. Vui lòng đổi mật khẩu để tiếp tục."
+          : "Đăng nhập user thành công.");
       }
     } catch (requestError) {
       setError(requestError.message);
@@ -393,6 +404,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
 
   function logout() {
     setToken("");
+    setRequiresPasswordChange(false);
     setProfile(null);
     setProfileForm({ full_name: "" });
     setEditingProfile(false);
@@ -517,13 +529,16 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
         }),
       }),
       "Đã đổi mật khẩu thành công.",
-      () => {
+      async () => {
         setPasswordForm({
           current_password: "",
           new_password: "",
           confirm_password: "",
         });
         setChangingPassword(false);
+        if (requiresPasswordChange) {
+          setRequiresPasswordChange(false);
+        }
       },
     );
   }
@@ -772,7 +787,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
 
   // Nếu admin khóa user ở nơi khác, yêu cầu API kế tiếp sẽ thu hồi phiên demo này.
   useEffect(() => {
-    if (!token) {
+    if (!token || requiresPasswordChange) {
       return;
     }
     let active = true;
@@ -786,7 +801,7 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
     return () => {
       active = false;
     };
-  }, [apiUrl, token, refreshActivity]);
+  }, [apiUrl, token, requiresPasswordChange, refreshActivity]);
 
   return (
     <section className="user-demo">
@@ -882,6 +897,76 @@ export default function UserDemo({ apiUrl, locale = "vi", onTokenChange }) {
           <p className="hint">
             {t("Demo gọi API backend; JWT user chỉ lưu trong bộ nhớ trang và không được dùng để truy cập chức năng admin.")}
           </p>
+        </section>
+      ) : requiresPasswordChange ? (
+        <section className="panel user-auth-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">{t("BẢO MẬT TÀI KHOẢN")}</p>
+              <h2>{t("Đổi mật khẩu")}</h2>
+            </div>
+            <span className="status-pill">{t("Cần đổi mật khẩu")}</span>
+          </div>
+          <p className="guest-access-note">
+            {t("Bạn đã không đăng nhập hơn 1 ngày. Vui lòng đổi mật khẩu để tiếp tục.")}
+          </p>
+          <form className="user-demo-profile-form" onSubmit={changePassword}>
+            <div className="user-password-fields">
+              <label>
+                {t("Mật khẩu hiện tại")}
+                <input
+                  autoComplete="current-password"
+                  maxLength={128}
+                  onChange={(event) => setPasswordForm((current) => ({
+                    ...current,
+                    current_password: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={passwordForm.current_password}
+                />
+              </label>
+              <label>
+                {t("Mật khẩu mới")}
+                <input
+                  autoComplete="new-password"
+                  maxLength={128}
+                  minLength={12}
+                  onChange={(event) => setPasswordForm((current) => ({
+                    ...current,
+                    new_password: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={passwordForm.new_password}
+                />
+              </label>
+              <label>
+                {t("Nhập lại mật khẩu mới")}
+                <input
+                  autoComplete="new-password"
+                  maxLength={128}
+                  minLength={12}
+                  onChange={(event) => setPasswordForm((current) => ({
+                    ...current,
+                    confirm_password: event.target.value,
+                  }))}
+                  required
+                  type="password"
+                  value={passwordForm.confirm_password}
+                />
+              </label>
+            </div>
+            <p className="hint">{t("Mật khẩu mới cần có ít nhất 12 ký tự.")}</p>
+            <div className="user-profile-actions">
+              <button className="button" disabled={busy} type="submit">
+                {busy ? t("Đang đổi mật khẩu...") : t("Cập nhật mật khẩu")}
+              </button>
+              <button className="button button-outline" disabled={busy} onClick={logout} type="button">
+                {t("Đăng xuất")}
+              </button>
+            </div>
+          </form>
         </section>
       ) : (
         <>

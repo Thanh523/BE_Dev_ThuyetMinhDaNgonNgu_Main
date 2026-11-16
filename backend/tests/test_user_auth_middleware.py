@@ -9,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from src.config.settings import Settings
 from src.middlewares.admin_auth import require_admin
-from src.middlewares.user_auth import require_user
+from src.middlewares.user_auth import require_user, require_user_password_change
 
 
 def settings():
@@ -75,6 +75,29 @@ class UserAuthMiddlewareTests(unittest.IsolatedAsyncioTestCase):
         database = Database(UserCollection({"UserId": "user-1", "IsActive": True}))
         with patch("src.middlewares.user_auth.get_settings", return_value=settings()):
             claims = await require_user(credentials(), database)
+
+        self.assertEqual("user-1", claims["UserId"])
+
+    async def test_password_change_required_blocks_normal_user_requests(self):
+        database = Database(UserCollection({
+            "UserId": "user-1",
+            "IsActive": True,
+            "PasswordChangeRequired": True,
+        }))
+        with patch("src.middlewares.user_auth.get_settings", return_value=settings()):
+            with self.assertRaises(HTTPException) as raised:
+                await require_user(credentials(), database)
+
+        self.assertEqual(403, raised.exception.status_code)
+
+    async def test_password_change_required_allows_password_change_request(self):
+        database = Database(UserCollection({
+            "UserId": "user-1",
+            "IsActive": True,
+            "PasswordChangeRequired": True,
+        }))
+        with patch("src.middlewares.user_auth.get_settings", return_value=settings()):
+            claims = await require_user_password_change(credentials(), database)
 
         self.assertEqual("user-1", claims["UserId"])
 

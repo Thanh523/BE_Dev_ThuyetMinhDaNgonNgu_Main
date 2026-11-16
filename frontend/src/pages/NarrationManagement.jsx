@@ -27,6 +27,7 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
   const [places, setPlaces] = useState([]);
   const [languages, setLanguages] = useState([]);
   const [placeId, setPlaceId] = useState("");
+  const [languageFilter, setLanguageFilter] = useState("");
   const [narrations, setNarrations] = useState([]);
   const [audios, setAudios] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -108,6 +109,9 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
     (audio) => String(audio.AudioId) === String(form.audio_id),
   );
   const selectedAudioText = selectedAudio?.TranslatedText || selectedAudio?.SourceText || "";
+  const filteredNarrations = languageFilter
+    ? narrations.filter((narration) => narration.LanguageCode === languageFilter)
+    : narrations;
 
   function selectAudio(audioId) {
     const audio = audios.find((item) => String(item.AudioId) === String(audioId));
@@ -219,15 +223,32 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
           Thêm nội dung
         </button>
       </div>
-      <label className="management-select">
-        Địa điểm
-        <select onChange={(event) => setPlaceId(event.target.value)} value={placeId}>
-          <option value="">Chọn địa điểm</option>
-          {places.map((place) => (
-            <option key={place.PlaceId} value={place.PlaceId}>{place.PlaceName}</option>
-          ))}
-        </select>
-      </label>
+      <div className="narration-filters">
+        <label className="management-select">
+          Địa điểm
+          <select onChange={(event) => setPlaceId(event.target.value)} value={placeId}>
+            <option value="">Chọn địa điểm</option>
+            {places.map((place) => (
+              <option key={place.PlaceId} value={place.PlaceId}>{place.PlaceName}</option>
+            ))}
+          </select>
+        </label>
+        <label className="management-select">
+          Ngôn ngữ
+          <select
+            aria-label="Lọc theo ngôn ngữ"
+            onChange={(event) => setLanguageFilter(event.target.value)}
+            value={languageFilter}
+          >
+            <option value="">Tất cả ngôn ngữ</option>
+            {languages.map((language) => (
+              <option key={language.LanguageCode} value={language.LanguageCode}>
+                {language.LanguageName} ({language.LanguageCode})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {(editingId || form.language_code) && (
         <form className="narration-form" onSubmit={saveNarration}>
@@ -298,8 +319,14 @@ export default function NarrationManagement({ apiUrl, token, setError, setNotice
       )}
 
       <div className="narration-list">
-        {!narrations.length && <p className="empty-note">Chưa có nội dung cho địa điểm này.</p>}
-        {narrations.map((narration) => (
+        {!filteredNarrations.length && (
+          <p className="empty-note">
+            {languageFilter
+              ? "Chưa có nội dung thuyết minh cho ngôn ngữ này."
+              : "Chưa có nội dung cho địa điểm này."}
+          </p>
+        )}
+        {filteredNarrations.map((narration) => (
           <article className="management-card" key={narration.NarrationId}>
             <div className="section-heading">
               <div>
